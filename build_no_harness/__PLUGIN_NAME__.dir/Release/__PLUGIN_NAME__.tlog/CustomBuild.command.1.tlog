@@ -1,6 +1,6 @@
 ^C:\DEV\JUCE-VST3-TEMPLATE\BUILD_NO_HARNESS\CMAKEFILES\B45AECD22CCA301FFC94521997D750D2\JUCEHEADER.H.RULE
 setlocal
-extern\juce\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe header C:/dev/juce-vst3-template/build_no_harness/__PLUGIN_NAME___artefacts/JuceLibraryCode/Release/Defs.txt C:/dev/juce-vst3-template/build_no_harness/__PLUGIN_NAME___artefacts/JuceLibraryCode/JuceHeader.h
+extern\juce\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe header C:/dev/juce-vst3-template/build_no_harness/OutSpread_artefacts/JuceLibraryCode/Release/Defs.txt C:/dev/juce-vst3-template/build_no_harness/OutSpread_artefacts/JuceLibraryCode/JuceHeader.h
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone

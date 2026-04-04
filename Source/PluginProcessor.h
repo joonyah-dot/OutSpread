@@ -1,11 +1,11 @@
 #pragma once
 #include <JuceHeader.h>
 
-class __PLUGIN_NAME__AudioProcessor : public juce::AudioProcessor
+class OutSpreadAudioProcessor : public juce::AudioProcessor
 {
 public:
-    __PLUGIN_NAME__AudioProcessor();
-    ~__PLUGIN_NAME__AudioProcessor() override = default;
+    OutSpreadAudioProcessor();
+    ~OutSpreadAudioProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -31,5 +31,5 @@ public:
     void setStateInformation (const void*, int) override {}
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (__PLUGIN_NAME__AudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutSpreadAudioProcessor)
 };

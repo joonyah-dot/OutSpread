@@ -1,5 +1,5 @@
 {
-  "plugin": "build/.../__PLUGIN_NAME__.vst3",
+  "plugin": "build/.../OutSpread.vst3",
   "sampleRate": 48000,
   "blockSize": 256,
   "channels": 2,

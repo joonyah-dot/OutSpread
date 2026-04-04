@@ -5,10 +5,10 @@
       <FullPath>C:\dev\juce-vst3-template\build_no_harness\x64\Release\ZERO_CHECK</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>C:\dev\juce-vst3-template\build_no_harness\Release\__PLUGIN_NAME___vst3_helper.exe</FullPath>
+      <FullPath>C:\dev\juce-vst3-template\build_no_harness\Release\OutSpread_vst3_helper.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>C:\dev\juce-vst3-template\build_no_harness\__PLUGIN_NAME___artefacts\Release\VST3\__PLUGIN_NAME__.vst3\Contents\x86_64-win\__PLUGIN_NAME__.vst3</FullPath>
+      <FullPath>C:\dev\juce-vst3-template\build_no_harness\OutSpread_artefacts\Release\VST3\OutSpread.vst3\Contents\x86_64-win\OutSpread.vst3</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

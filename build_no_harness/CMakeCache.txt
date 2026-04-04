@@ -80,7 +80,7 @@ CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO:STRING=/debug /INCREMENTAL
 CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/pkgRedirects
 
 //Install path prefix, prepended onto install directories.
-CMAKE_INSTALL_PREFIX:PATH=C:/Program Files (x86)/__PLUGIN_NAME__
+CMAKE_INSTALL_PREFIX:PATH=C:/Program Files (x86)/OutSpread
 
 //Path to a program.
 CMAKE_LINKER:FILEPATH=C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/link.exe
@@ -118,7 +118,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=__PLUGIN_NAME__
+CMAKE_PROJECT_NAME:STATIC=OutSpread
 
 //Value Computed by CMake
 CMAKE_PROJECT_SPDX_LICENSE:STATIC=
@@ -247,13 +247,13 @@ JUCE_TOOL_INSTALL_DIR:STRING=bin/JUCE-8.0.12
 JUCE_WEBVIEW2_PACKAGE_LOCATION:BOOL=OFF
 
 //Value Computed by CMake
-__PLUGIN_NAME___BINARY_DIR:STATIC=C:/dev/juce-vst3-template/build_no_harness
+OutSpread_BINARY_DIR:STATIC=C:/dev/juce-vst3-template/build_no_harness
 
 //Value Computed by CMake
-__PLUGIN_NAME___IS_TOP_LEVEL:STATIC=ON
+OutSpread_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
-__PLUGIN_NAME___SOURCE_DIR:STATIC=C:/dev/juce-vst3-template
+OutSpread_SOURCE_DIR:STATIC=C:/dev/juce-vst3-template
 
 
 ########################

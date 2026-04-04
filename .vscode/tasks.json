@@ -10,7 +10,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        "cmake --build build --config Debug --target __PLUGIN_NAME___VST3; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Copy-Item -Recurse -Force \"${workspaceFolder}\\build\\__PLUGIN_NAME___artefacts\\Debug\\VST3\\__PLUGIN_NAME__.vst3\" \"C:\\Program Files\\Common Files\\VST3\\\""
+        "cmake --build build --config Debug --target OutSpread_VST3; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Copy-Item -Recurse -Force \"${workspaceFolder}\\build\\OutSpread_artefacts\\Debug\\VST3\\OutSpread.vst3\" \"C:\\Program Files\\Common Files\\VST3\\\""
       ],
       "problemMatcher": [],
       "group": "build"

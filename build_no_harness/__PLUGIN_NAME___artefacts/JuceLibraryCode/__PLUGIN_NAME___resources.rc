@@ -16,9 +16,9 @@ BEGIN
     BLOCK "040904E4"
     BEGIN
       VALUE "CompanyName",  "YourCompanyOrName\0"
-      VALUE "FileDescription",  "__PLUGIN_NAME__\0"
+      VALUE "FileDescription",  "OutSpread\0"
       VALUE "FileVersion",  "0.1.0\0"
-      VALUE "ProductName",  "__PLUGIN_NAME__\0"
+      VALUE "ProductName",  "OutSpread\0"
       VALUE "ProductVersion",  "0.1.0\0"
     END
   END

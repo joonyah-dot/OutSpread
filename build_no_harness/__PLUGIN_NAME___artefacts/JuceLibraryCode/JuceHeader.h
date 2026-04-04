@@ -40,7 +40,7 @@
 #if ! JUCE_DONT_DECLARE_PROJECTINFO
 namespace ProjectInfo
 {
-    const char* const  projectName    = "__PLUGIN_NAME__";
+    const char* const  projectName    = "OutSpread";
     const char* const  companyName    = "YourCompanyOrName";
     const char* const  versionString  = "0.1.0";
     const int          versionNumber  =  0x100;

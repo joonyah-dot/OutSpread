@@ -900,9 +900,9 @@ events:
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files/CMake/sbin/"
       - "C:/Program Files/CMake/"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/bin/"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/sbin/"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/"
+      - "C:/Program Files (x86)/OutSpread/bin/"
+      - "C:/Program Files (x86)/OutSpread/sbin/"
+      - "C:/Program Files (x86)/OutSpread/"
     searched_directories:
       - "C:/Users/kyles/.codex/tmp/arg0/codex-arg09O0jZX/rc.com"
       - "C:/Users/kyles/.codex/tmp/arg0/codex-arg09O0jZX/rc.exe"
@@ -991,15 +991,15 @@ events:
       - "C:/Program Files/CMake/rc.com"
       - "C:/Program Files/CMake/rc.exe"
       - "C:/Program Files/CMake/rc"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/bin/rc.com"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/bin/rc.exe"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/bin/rc"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/sbin/rc.com"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/sbin/rc.exe"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/sbin/rc"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/rc.com"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/rc.exe"
-      - "C:/Program Files (x86)/__PLUGIN_NAME__/rc"
+      - "C:/Program Files (x86)/OutSpread/bin/rc.com"
+      - "C:/Program Files (x86)/OutSpread/bin/rc.exe"
+      - "C:/Program Files (x86)/OutSpread/bin/rc"
+      - "C:/Program Files (x86)/OutSpread/sbin/rc.com"
+      - "C:/Program Files (x86)/OutSpread/sbin/rc.exe"
+      - "C:/Program Files (x86)/OutSpread/sbin/rc"
+      - "C:/Program Files (x86)/OutSpread/rc.com"
+      - "C:/Program Files (x86)/OutSpread/rc.exe"
+      - "C:/Program Files (x86)/OutSpread/rc"
     found: false
     search_context:
       ENV{PATH}:
@@ -1029,12 +1029,12 @@ events:
         - "C:\\Users\\kyles\\AppData\\Local\\Python\\bin"
         - "C:\\Users\\kyles\\AppData\\Local\\Muse Hub\\lib"
         - "c:\\Users\\kyles\\.vscode\\extensions\\openai.chatgpt-0.4.76-win32-x64\\bin\\windows-x86_64"
-      CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/__PLUGIN_NAME__"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/OutSpread"
       CMAKE_SYSTEM_PREFIX_PATH:
         - "C:/Program Files"
         - "C:/Program Files (x86)"
         - "C:/Program Files/CMake"
-        - "C:/Program Files (x86)/__PLUGIN_NAME__"
+        - "C:/Program Files (x86)/OutSpread"
   -
     kind: "try_compile-v1"
     backtrace:
