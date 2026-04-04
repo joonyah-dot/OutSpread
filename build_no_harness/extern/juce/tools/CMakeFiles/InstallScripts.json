@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/dev/juce-vst3-template/build_no_harness/extern/juce/tools/cmake_install.cmake",
+		"C:/dev/juce-vst3-template/build_no_harness/extern/juce/tools/modules/cmake_install.cmake",
+		"C:/dev/juce-vst3-template/build_no_harness/extern/juce/tools/extras/Build/cmake_install.cmake",
+		"C:/dev/juce-vst3-template/build_no_harness/extern/juce/tools/extras/Build/juceaide/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

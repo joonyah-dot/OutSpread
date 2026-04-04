@@ -1,0 +1,14 @@
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/__PLUGIN_NAME__.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/__PLUGIN_NAME___All.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/__PLUGIN_NAME___Standalone.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/__PLUGIN_NAME___rc_lib.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/__PLUGIN_NAME___VST3.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/__PLUGIN_NAME___vst3_helper.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/INSTALL.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/ALL_BUILD.dir
+C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/ZERO_CHECK.dir
+C:/dev/juce-vst3-template/build_no_harness/extern/juce/CMakeFiles/INSTALL.dir
+C:/dev/juce-vst3-template/build_no_harness/extern/juce/CMakeFiles/ALL_BUILD.dir
+C:/dev/juce-vst3-template/build_no_harness/extern/juce/modules/CMakeFiles/INSTALL.dir
+C:/dev/juce-vst3-template/build_no_harness/extern/juce/extras/Build/CMakeFiles/INSTALL.dir
+C:/dev/juce-vst3-template/build_no_harness/extern/juce/extras/Build/juceaide/CMakeFiles/INSTALL.dir

@@ -1,0 +1,8 @@
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_AAX.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_AAX.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_AAX_utils.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_AAX_utils.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_ARA.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_ARA.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_LV2.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_LV2.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_Standalone.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_Standalone.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_Unity.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_Unity.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_VST2.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_VST2.obj
+C:\dev\juce-vst3-template\extern\juce\modules\juce_audio_plugin_client\juce_audio_plugin_client_VST3.cpp;C:\dev\juce-vst3-template\build_harness_check\__PLUGIN_NAME___VST3.dir\Release\juce_audio_plugin_client_VST3.obj

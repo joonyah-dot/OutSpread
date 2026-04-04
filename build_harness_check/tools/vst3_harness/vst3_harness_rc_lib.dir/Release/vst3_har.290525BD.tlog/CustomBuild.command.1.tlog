@@ -1,0 +1,20 @@
+^C:\DEV\JUCE-VST3-TEMPLATE\BUILD_HARNESS_CHECK\CMAKEFILES\873C4B7877DC61A764D54E76DCED0CAC\VST3_HARNESS_RESOURCES.RC.RULE
+setlocal
+..\..\extern\juce\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe rcfile C:/dev/juce-vst3-template/build_harness_check/tools/vst3_harness/vst3_harness_artefacts/JuceLibraryCode/Info.txt C:/dev/juce-vst3-template/build_harness_check/tools/vst3_harness/vst3_harness_artefacts/JuceLibraryCode/vst3_harness_resources.rc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\DEV\JUCE-VST3-TEMPLATE\TOOLS\VST3_HARNESS\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/dev/juce-vst3-template -BC:/dev/juce-vst3-template/build_harness_check --check-stamp-file C:/dev/juce-vst3-template/build_harness_check/tools/vst3_harness/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

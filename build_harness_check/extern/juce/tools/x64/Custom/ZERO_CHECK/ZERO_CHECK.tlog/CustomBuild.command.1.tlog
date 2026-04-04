@@ -1,0 +1,10 @@
+^C:\DEV\JUCE-VST3-TEMPLATE\BUILD_HARNESS_CHECK\EXTERN\JUCE\TOOLS\CMAKEFILES\DF7188824C3115434797723F84295ACB\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/dev/juce-vst3-template/extern/juce -BC:/dev/juce-vst3-template/build_harness_check/extern/juce/tools --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/dev/juce-vst3-template/build_harness_check/extern/juce/tools/JUCE.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

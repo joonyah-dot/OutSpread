@@ -1,0 +1,20 @@
+^C:\DEV\JUCE-VST3-TEMPLATE\BUILD_NO_HARNESS\CMAKEFILES\B45AECD22CCA301FFC94521997D750D2\JUCEHEADER.H.RULE
+setlocal
+extern\juce\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe header C:/dev/juce-vst3-template/build_no_harness/__PLUGIN_NAME___artefacts/JuceLibraryCode/Release/Defs.txt C:/dev/juce-vst3-template/build_no_harness/__PLUGIN_NAME___artefacts/JuceLibraryCode/JuceHeader.h
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\DEV\JUCE-VST3-TEMPLATE\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/dev/juce-vst3-template -BC:/dev/juce-vst3-template/build_no_harness --check-stamp-file C:/dev/juce-vst3-template/build_no_harness/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

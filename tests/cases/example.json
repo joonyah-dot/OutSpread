@@ -1,0 +1,14 @@
+{
+  "plugin": "build/.../__PLUGIN_NAME__.vst3",
+  "sampleRate": 48000,
+  "blockSize": 256,
+  "channels": 2,
+  "input": "tests/audio/hats.wav",
+  "warmupMs": 50,
+  "renderSeconds": 2.0,
+  "paramsByName": {
+    "Drive": 1.0,
+    "Mix": 1.0
+  },
+  "paramsByIndex": {}
+}

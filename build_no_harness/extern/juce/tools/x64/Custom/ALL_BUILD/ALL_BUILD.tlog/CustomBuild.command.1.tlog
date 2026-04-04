@@ -1,0 +1,10 @@
+^C:\DEV\JUCE-VST3-TEMPLATE\EXTERN\JUCE\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/dev/juce-vst3-template/extern/juce -BC:/dev/juce-vst3-template/build_no_harness/extern/juce/tools --check-stamp-file C:/dev/juce-vst3-template/build_no_harness/extern/juce/tools/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

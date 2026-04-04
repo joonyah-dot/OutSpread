@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Solution>
+	<Configurations>
+		<BuildType Name="Debug"/>
+		<BuildType Name="Release"/>
+		<BuildType Name="MinSizeRel"/>
+		<BuildType Name="RelWithDebInfo"/>
+		<Platform Name="x64"/>
+	</Configurations>
+	<Project Path="__PLUGIN_NAME___rc_lib.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="4b427f56-2ca6-3292-806e-883e50a219ef">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="__PLUGIN_NAME___vst3_helper.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="f559df17-df2e-3543-b68d-378d3bbedce9">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Folder Name="/CMakePredefinedTargets/">
+		<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="1ea09e9a-35ed-32dd-a3c3-b34cb1d24085" DefaultStartup="true">
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME__.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___Standalone.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___VST3.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___rc_lib.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___vst3_helper.vcxproj"/>
+		</Project>
+		<Project Path="INSTALL.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="58b826a2-1808-3e89-b32e-ba42fb5d68d8">
+			<BuildDependency Project="ALL_BUILD.vcxproj"/>
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<Build Solution="Debug|*" Project="false"/>
+			<Build Solution="Release|*" Project="false"/>
+			<Build Solution="MinSizeRel|*" Project="false"/>
+			<Build Solution="RelWithDebInfo|*" Project="false"/>
+		</Project>
+		<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="ed4324d1-f25c-3e8a-b6cc-63971284d1b8"/>
+	</Folder>
+	<Folder Name="/__PLUGIN_NAME__/">
+		<Project Path="__PLUGIN_NAME__.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="acee8982-6d7c-3514-9a6e-2110377d494e">
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		</Project>
+		<Project Path="__PLUGIN_NAME___All.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="f0927797-4902-3a19-a87b-6763c74084f0">
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___Standalone.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___VST3.vcxproj"/>
+			<Build Solution="Debug|*" Project="false"/>
+			<Build Solution="Release|*" Project="false"/>
+			<Build Solution="MinSizeRel|*" Project="false"/>
+			<Build Solution="RelWithDebInfo|*" Project="false"/>
+		</Project>
+		<Project Path="__PLUGIN_NAME___Standalone.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="52c13fd1-6206-34c7-be37-e4fc6a047ae9">
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME__.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___rc_lib.vcxproj"/>
+		</Project>
+		<Project Path="__PLUGIN_NAME___VST3.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="e5efb0b7-c7c4-39c9-813d-ab4a48db40bd">
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME__.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___rc_lib.vcxproj"/>
+			<BuildDependency Project="__PLUGIN_NAME___vst3_helper.vcxproj"/>
+		</Project>
+	</Folder>
+</Solution>

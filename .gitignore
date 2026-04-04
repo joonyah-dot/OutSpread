@@ -1,0 +1,26 @@
+# Build output
+build/
+out/
+.vs/
+*.sln
+*.vcxproj*
+*.user
+
+# Plugin binaries / artifacts
+*.vst3
+*.dll
+*.pdb
+*.exp
+*.lib
+
+# OS/editor noise
+Thumbs.db
+.DS_Store
+
+# VS Code settings (keep tasks in repo, ignore everything else)
+.vscode/*
+!.vscode/tasks.json
+
+# Harness-generated content
+tests/_generated/
+artifacts/

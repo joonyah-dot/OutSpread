@@ -1,0 +1,12 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-4.2/Modules/BasicConfigVersion-ExactVersion.cmake.in
+C:/Program Files/CMake/share/cmake-4.2/Modules/CMakeDependentOption.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/CMakePackageConfigHelpers.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/WriteBasicConfigVersionFile.cmake
+C:/dev/juce-vst3-template/build_harness_check/CMakeFiles/cmake.verify_globs
+C:/dev/juce-vst3-template/extern/juce/CMakeLists.txt
+C:/dev/juce-vst3-template/extern/juce/extras/Build/CMake/JUCECheckAtomic.cmake
+C:/dev/juce-vst3-template/extern/juce/extras/Build/CMake/JUCEConfig.cmake.in
+C:/dev/juce-vst3-template/extern/juce/extras/Build/CMake/JUCEHelperTargets.cmake
+C:/dev/juce-vst3-template/extern/juce/extras/Build/CMake/JUCEModuleSupport.cmake
+C:/dev/juce-vst3-template/extern/juce/extras/Build/CMake/JUCEUtils.cmake
