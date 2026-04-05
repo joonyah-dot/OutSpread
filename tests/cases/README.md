@@ -64,6 +64,22 @@ The runner resolves `stimulusId` values through `tests/_generated/stimuli/stimul
 
 String inputs are also allowed when they clearly identify a generated stimulus ID, generated stimulus file name, or an explicit file path. Do not rely on ambiguous shorthand.
 
+## Reference States
+
+Grouped cases should reference reusable Blackhole target-state definitions through `referenceStateId`.
+
+Preferred form:
+
+```json
+{
+  "referenceStateId": "blackhole_attack_probe"
+}
+```
+
+The runner resolves `referenceStateId` values through `tests/reference_states/reference_state_manifest.json` and fails if the referenced state is missing or malformed.
+
+Cases should not duplicate full target parameter blobs by default. Reusable target-state intent belongs in `tests/reference_states/`, while case files describe the input, analysis profile, and any case-specific overrides.
+
 ## Adding Cases
 
 When adding a new case:

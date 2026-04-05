@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "outspread.reference_states",
+  "description": "Reusable Blackhole target-state definitions for future reference capture.",
+  "stateDirectory": "tests/reference_states",
+  "allowedStatuses": [
+    "planned",
+    "pending_capture",
+    "captured"
+  ],
+  "allowedSourceTypes": [
+    "planned_blackhole_capture",
+    "manual_capture",
+    "harness_dump",
+    "host_saved_state"
+  ],
+  "preferredParameterAssignment": "paramsByName",
+  "stateFields": {
+    "required": [
+      "id",
+      "status",
+      "description",
+      "targetGroups",
+      "sourceType",
+      "referenceLock",
+      "paramsByName",
+      "notes"
+    ],
+    "optional": [
+      "paramsByIndex"
+    ]
+  },
+  "referenceLockFields": [
+    "pluginVersion",
+    "platform",
+    "hostOrRenderPath",
+    "baselineSampleRate",
+    "baselineBlockSize"
+  ]
+}

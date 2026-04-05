@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_size_probe",
+  "status": "pending_capture",
+  "description": "Reusable Blackhole size-focused target state for space-scaling comparison work.",
+  "targetGroups": [
+    "size"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "No real Blackhole size-state values are recorded yet.",
+    "This ID exists so size cases can stay linked to one reusable capture target."
+  ]
+}

@@ -6,7 +6,7 @@
   },
   "renderSeconds": 20.0,
   "paramsByName": {},
-  "referenceStateId": "pending_reference_capture",
+  "referenceStateId": "blackhole_tail_probe",
   "expectedDeterminism": "deterministic_input",
   "analysisProfile": "tail",
   "scaffoldOnly": true,

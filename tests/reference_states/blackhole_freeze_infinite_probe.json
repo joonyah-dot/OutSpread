@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_freeze_infinite_probe",
+  "status": "pending_capture",
+  "description": "Reusable Blackhole Freeze/Infinite target state for long-run latch behavior capture work.",
+  "targetGroups": [
+    "freeze_infinite"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "No real Freeze or Infinite capture has been recorded in this file yet.",
+    "This state exists so long-run cases can reference a stable target-state ID."
+  ]
+}

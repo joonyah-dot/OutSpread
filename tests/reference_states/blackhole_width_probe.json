@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_width_probe",
+  "status": "pending_capture",
+  "description": "Reusable Blackhole stereo-width target state for mono-to-stereo spread capture work.",
+  "targetGroups": [
+    "width"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This is a planned width-state placeholder only.",
+    "Future capture work should replace the empty parameter set with real reference data."
+  ]
+}

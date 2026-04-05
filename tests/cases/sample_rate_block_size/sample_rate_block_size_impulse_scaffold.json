@@ -7,7 +7,7 @@
   "sampleRate": 96000,
   "blockSize": 512,
   "paramsByName": {},
-  "referenceStateId": "pending_reference_capture",
+  "referenceStateId": "blackhole_sample_rate_block_size_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "sample_rate_block_size",
   "scaffoldOnly": true,

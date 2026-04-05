@@ -43,6 +43,14 @@ def parse_multi_csv_args(raw_values: list[str] | None) -> list[str]:
     return items
 
 
+def normalize_notes(value: object, context: str) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    raise SystemExit(f"error: {context} must be a string or a list of strings.")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Plan manifest-driven OutSpread measurement runs without rendering audio."
@@ -168,7 +176,9 @@ def load_stimuli_manifest(repo_root: Path, manifest: dict) -> tuple[Path, dict]:
     return stimuli_manifest_path, stimuli_manifest
 
 
-def build_stimulus_indexes(stimuli_manifest: dict) -> tuple[dict[str, dict], dict[str, dict]]:
+def build_stimulus_indexes(
+    stimuli_manifest: dict,
+) -> tuple[dict[str, dict], dict[str, dict]]:
     by_id: dict[str, dict] = {}
     by_file_name: dict[str, dict] = {}
     for entry in stimuli_manifest.get("files", []):
@@ -181,6 +191,200 @@ def build_stimulus_indexes(stimuli_manifest: dict) -> tuple[dict[str, dict], dic
         if isinstance(file_name, str):
             by_file_name[file_name] = entry
     return by_id, by_file_name
+
+
+def load_reference_state_manifest(
+    repo_root: Path, manifest: dict
+) -> tuple[Path, dict]:
+    state_manifest_arg = manifest.get(
+        "referenceStateManifestPath", "tests/reference_states/reference_state_manifest.json"
+    )
+    state_manifest_path = (repo_root / state_manifest_arg).resolve()
+    state_manifest = load_json(state_manifest_path)
+
+    if "stateDirectory" not in state_manifest or not isinstance(
+        state_manifest["stateDirectory"], str
+    ):
+        raise SystemExit("error: reference-state manifest must define 'stateDirectory'.")
+    if "allowedStatuses" not in state_manifest or not isinstance(
+        state_manifest["allowedStatuses"], list
+    ):
+        raise SystemExit(
+            "error: reference-state manifest must define 'allowedStatuses'."
+        )
+    if "allowedSourceTypes" not in state_manifest or not isinstance(
+        state_manifest["allowedSourceTypes"], list
+    ):
+        raise SystemExit(
+            "error: reference-state manifest must define 'allowedSourceTypes'."
+        )
+
+    state_manifest.setdefault(
+        "referenceLockFields",
+        [
+            "pluginVersion",
+            "platform",
+            "hostOrRenderPath",
+            "baselineSampleRate",
+            "baselineBlockSize",
+        ],
+    )
+    state_manifest.setdefault(
+        "stateFields",
+        {
+            "required": [
+                "id",
+                "status",
+                "description",
+                "targetGroups",
+                "sourceType",
+                "referenceLock",
+                "paramsByName",
+                "notes",
+            ],
+            "optional": ["paramsByIndex"],
+        },
+    )
+
+    return state_manifest_path, state_manifest
+
+
+def discover_reference_state_files(
+    repo_root: Path, state_manifest_path: Path, state_manifest: dict
+) -> list[Path]:
+    state_dir = (repo_root / state_manifest["stateDirectory"]).resolve()
+    if not state_dir.is_dir():
+        raise SystemExit(
+            f"error: reference-state directory does not exist: {state_dir}"
+        )
+
+    return sorted(
+        path
+        for path in state_dir.glob("*.json")
+        if path.resolve() != state_manifest_path.resolve()
+    )
+
+
+def normalize_reference_state_record(state_path: Path, state_data: dict) -> dict:
+    return {
+        "id": state_data["id"],
+        "status": state_data["status"],
+        "description": state_data["description"],
+        "targetGroups": state_data["targetGroups"],
+        "sourceType": state_data["sourceType"],
+        "referenceLock": state_data["referenceLock"],
+        "paramsByName": state_data.get("paramsByName", {}),
+        "paramsByIndex": state_data.get("paramsByIndex", {}),
+        "notes": normalize_notes(
+            state_data["notes"], f"reference-state file {state_path} field 'notes'"
+        ),
+        "stateFilePath": str(state_path.resolve().as_posix()),
+    }
+
+
+def validate_reference_state_object(
+    state_path: Path,
+    state_data: dict,
+    state_manifest: dict,
+    available_groups: set[str],
+) -> None:
+    required_fields = state_manifest["stateFields"]["required"]
+    missing_fields = [field for field in required_fields if field not in state_data]
+    if missing_fields:
+        raise SystemExit(
+            f"error: reference-state file {state_path} is missing required field(s): "
+            + ", ".join(missing_fields)
+        )
+
+    state_id = state_data.get("id")
+    if not isinstance(state_id, str) or not CASE_ID_PATTERN.match(state_id):
+        raise SystemExit(
+            f"error: reference-state file {state_path} must define a lowercase snake_case 'id'."
+        )
+
+    status = state_data.get("status")
+    if status not in state_manifest["allowedStatuses"]:
+        raise SystemExit(
+            f"error: reference-state file {state_path} has invalid status '{status}'."
+        )
+
+    description = state_data.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise SystemExit(
+            f"error: reference-state file {state_path} must define a non-empty 'description'."
+        )
+
+    target_groups = state_data.get("targetGroups")
+    if not isinstance(target_groups, list) or not target_groups:
+        raise SystemExit(
+            f"error: reference-state file {state_path} must define a non-empty 'targetGroups' list."
+        )
+    if any(not isinstance(group, str) or group not in available_groups for group in target_groups):
+        raise SystemExit(
+            f"error: reference-state file {state_path} contains unknown group names in 'targetGroups'."
+        )
+
+    source_type = state_data.get("sourceType")
+    if source_type not in state_manifest["allowedSourceTypes"]:
+        raise SystemExit(
+            f"error: reference-state file {state_path} has invalid sourceType '{source_type}'."
+        )
+
+    reference_lock = state_data.get("referenceLock")
+    if not isinstance(reference_lock, dict):
+        raise SystemExit(
+            f"error: reference-state file {state_path} must define 'referenceLock' as an object."
+        )
+    for field_name in state_manifest["referenceLockFields"]:
+        if field_name not in reference_lock:
+            raise SystemExit(
+                f"error: reference-state file {state_path} is missing referenceLock field '{field_name}'."
+            )
+
+    for numeric_field in ("baselineSampleRate", "baselineBlockSize"):
+        value = reference_lock.get(numeric_field)
+        if value is not None and (not isinstance(value, int) or value <= 0):
+            raise SystemExit(
+                f"error: reference-state file {state_path} field '{numeric_field}' must be null or a positive integer."
+            )
+
+    if not isinstance(state_data.get("paramsByName"), dict):
+        raise SystemExit(
+            f"error: reference-state file {state_path} field 'paramsByName' must be an object."
+        )
+
+    if "paramsByIndex" in state_data and not isinstance(state_data["paramsByIndex"], dict):
+        raise SystemExit(
+            f"error: reference-state file {state_path} field 'paramsByIndex' must be an object."
+        )
+
+    normalize_notes(
+        state_data.get("notes"),
+        f"reference-state file {state_path} field 'notes'",
+    )
+
+
+def load_reference_states(
+    repo_root: Path,
+    state_manifest_path: Path,
+    state_manifest: dict,
+    available_groups: set[str],
+) -> tuple[dict[str, dict], list[str]]:
+    discovered_files = discover_reference_state_files(
+        repo_root, state_manifest_path, state_manifest
+    )
+    states_by_id: dict[str, dict] = {}
+    for state_path in discovered_files:
+        state_data = load_json(state_path)
+        validate_reference_state_object(
+            state_path, state_data, state_manifest, available_groups
+        )
+        state_id = state_data["id"]
+        if state_id in states_by_id:
+            raise SystemExit(f"error: duplicate reference-state ID discovered: {state_id}")
+        states_by_id[state_id] = normalize_reference_state_record(state_path, state_data)
+
+    return states_by_id, sorted(states_by_id)
 
 
 def resolve_stimulus_entry(entry: dict, requested_input: object) -> dict:
@@ -276,7 +480,9 @@ def resolve_input_reference(
     )
 
 
-def discover_case_files(repo_root: Path, selected_groups: list[str], manifest: dict) -> dict[str, list[Path]]:
+def discover_case_files(
+    repo_root: Path, selected_groups: list[str], manifest: dict
+) -> dict[str, list[Path]]:
     discovered: dict[str, list[Path]] = {}
     group_definitions = {item["name"]: item for item in manifest["groups"]}
     for group_name in selected_groups:
@@ -290,7 +496,9 @@ def discover_case_files(repo_root: Path, selected_groups: list[str], manifest: d
     return discovered
 
 
-def validate_case_object(case_path: Path, case_data: dict, group_name: str, manifest: dict) -> None:
+def validate_case_object(
+    case_path: Path, case_data: dict, group_name: str, manifest: dict
+) -> None:
     required_fields = manifest.get("caseFields", {}).get("required", [])
     missing_fields = [field for field in required_fields if field not in case_data]
     if missing_fields:
@@ -315,6 +523,14 @@ def validate_case_object(case_path: Path, case_data: dict, group_name: str, mani
             f"error: case file {case_path} must define 'input' as a string or object."
         )
 
+    reference_state_id = case_data.get("referenceStateId")
+    if not isinstance(reference_state_id, str) or not CASE_ID_PATTERN.match(
+        reference_state_id
+    ):
+        raise SystemExit(
+            f"error: case file {case_path} must define a lowercase snake_case 'referenceStateId'."
+        )
+
     for field_name in ("paramsByName", "paramsByIndex"):
         if field_name in case_data and not isinstance(case_data[field_name], dict):
             raise SystemExit(
@@ -329,6 +545,7 @@ def load_declared_cases(
     requested_case_ids: list[str],
     stimuli_by_id: dict[str, dict],
     stimuli_by_file_name: dict[str, dict],
+    reference_states_by_id: dict[str, dict],
 ) -> tuple[dict[str, list[dict]], list[str]]:
     discovered_paths = discover_case_files(repo_root, selected_groups, manifest)
     requested_case_id_set = set(requested_case_ids)
@@ -349,6 +566,12 @@ def load_declared_cases(
             if requested_case_id_set and case_id not in requested_case_id_set:
                 continue
 
+            reference_state_id = case_data["referenceStateId"]
+            if reference_state_id not in reference_states_by_id:
+                raise SystemExit(
+                    f"error: case file {case_path} references unknown referenceStateId '{reference_state_id}'."
+                )
+
             resolved_input = resolve_input_reference(
                 repo_root,
                 case_data["input"],
@@ -361,6 +584,7 @@ def load_declared_cases(
                     "caseFilePath": str(case_path.resolve().as_posix()),
                     "caseData": case_data,
                     "resolvedInput": resolved_input,
+                    "resolvedReferenceState": reference_states_by_id[reference_state_id],
                 }
             )
             matched_requested_case_ids.add(case_id)
@@ -445,6 +669,8 @@ def write_case_plans(
                 "analysisProfile": case_data.get("analysisProfile", group_name),
                 "expectedDeterminism": case_data.get("expectedDeterminism"),
                 "referenceStateId": case_data.get("referenceStateId"),
+                "referenceStateStatus": case_record["resolvedReferenceState"]["status"],
+                "resolvedReferenceState": case_record["resolvedReferenceState"],
                 "notes": case_data.get("notes"),
                 "expectedArtifacts": expected_artifacts,
             }
@@ -458,10 +684,32 @@ def write_case_plans(
     return planned_cases_by_group
 
 
+def summarize_reference_state_usage(
+    planned_cases: list[dict], allowed_statuses: list[str]
+) -> dict:
+    used_states: dict[str, dict] = {}
+    for case in planned_cases:
+        state = case["resolvedReferenceState"]
+        used_states[state["id"]] = state
+
+    status_counts = {status: 0 for status in allowed_statuses}
+    for state in used_states.values():
+        status_counts[state["status"]] += 1
+
+    state_ids = sorted(used_states)
+    states_used = [used_states[state_id] for state_id in state_ids]
+    return {
+        "referenceStateIds": state_ids,
+        "referenceStateStatusCounts": status_counts,
+        "referenceStates": states_used,
+    }
+
+
 def build_group_summary(
     group_name: str,
     summary_path: Path,
     planned_cases: list[dict],
+    allowed_state_statuses: list[str],
 ) -> dict:
     if planned_cases:
         status = "planning_ready"
@@ -476,6 +724,10 @@ def build_group_summary(
             "No plugin renders or reference captures were executed in this run.",
         ]
 
+    reference_state_usage = summarize_reference_state_usage(
+        planned_cases, allowed_state_statuses
+    )
+
     return {
         "schemaVersion": 1,
         "group": group_name,
@@ -485,6 +737,10 @@ def build_group_summary(
         "summaryPath": str(summary_path.as_posix()),
         "caseCount": len(planned_cases),
         "caseIds": [case["caseId"] for case in planned_cases],
+        "referenceStateIds": reference_state_usage["referenceStateIds"],
+        "referenceStateStatusCounts": reference_state_usage[
+            "referenceStateStatusCounts"
+        ],
         "cases": planned_cases,
         "notes": notes,
     }
@@ -527,8 +783,20 @@ def main() -> int:
     selected_groups = normalize_groups(manifest, args)
     requested_case_ids = parse_multi_csv_args(args.case_id)
 
+    available_groups = {item["name"] for item in manifest["groups"]}
+
     stimuli_manifest_path, stimuli_manifest = load_stimuli_manifest(repo_root, manifest)
     stimuli_by_id, stimuli_by_file_name = build_stimulus_indexes(stimuli_manifest)
+
+    reference_state_manifest_path, reference_state_manifest = load_reference_state_manifest(
+        repo_root, manifest
+    )
+    reference_states_by_id, declared_reference_state_ids = load_reference_states(
+        repo_root,
+        reference_state_manifest_path,
+        reference_state_manifest,
+        available_groups,
+    )
 
     group_cases, discovered_case_ids = load_declared_cases(
         repo_root,
@@ -537,6 +805,7 @@ def main() -> int:
         requested_case_ids,
         stimuli_by_id,
         stimuli_by_file_name,
+        reference_states_by_id,
     )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -554,13 +823,17 @@ def main() -> int:
 
     empty_groups: list[str] = []
     group_summaries: dict[str, dict] = {}
+    all_planned_cases: list[dict] = []
     for group_name in selected_groups:
         summary_file_name = manifest["groupSummaryFiles"][group_name]
         summary_path = run_dir / summary_file_name
+        planned_cases = planned_cases_by_group.get(group_name, [])
+        all_planned_cases.extend(planned_cases)
         group_summary = build_group_summary(
             group_name,
             summary_path,
-            planned_cases_by_group.get(group_name, []),
+            planned_cases,
+            reference_state_manifest["allowedStatuses"],
         )
         if group_summary["caseCount"] == 0:
             empty_groups.append(group_name)
@@ -572,9 +845,14 @@ def main() -> int:
             "status": "generated",
             "caseCount": group_summary["caseCount"],
             "caseIds": group_summary["caseIds"],
+            "referenceStateIds": group_summary["referenceStateIds"],
+            "referenceStateStatusCounts": group_summary["referenceStateStatusCounts"],
         }
 
     top_level_summaries = build_top_level_summaries(run_dir, manifest, selected_groups)
+    reference_state_usage = summarize_reference_state_usage(
+        all_planned_cases, reference_state_manifest["allowedStatuses"]
+    )
 
     summary = {
         "schemaVersion": 1,
@@ -586,6 +864,7 @@ def main() -> int:
         "summaryPath": str((run_dir / "summary.json").as_posix()),
         "caseManifestPath": str(manifest_path.as_posix()),
         "stimuliManifestPath": str(stimuli_manifest_path.as_posix()),
+        "referenceStateManifestPath": str(reference_state_manifest_path.as_posix()),
         "artifactsRoot": str(artifacts_root.as_posix()),
         "runDirectory": str(run_dir.as_posix()),
         "perCaseArtifactsRoot": str((run_dir / "cases").as_posix()),
@@ -596,12 +875,19 @@ def main() -> int:
         "emptyGroups": empty_groups,
         "pluginUnderTest": args.plugin_under_test,
         "referencePlugin": args.reference_plugin,
+        "declaredReferenceStateIds": declared_reference_state_ids,
+        "referenceStateIdsUsed": reference_state_usage["referenceStateIds"],
+        "referenceStateStatusCounts": reference_state_usage[
+            "referenceStateStatusCounts"
+        ],
+        "referenceStatesUsed": reference_state_usage["referenceStates"],
+        "unresolvedReferenceStateIds": [],
         "groupSummaries": group_summaries,
         "topLevelSummaries": top_level_summaries,
         "notes": [
             "This run planned declared cases and wrote orchestration artifacts only.",
             "No plugin renders or reference captures were executed in this ticket.",
-            "Declared cases may still be scaffold cases pending real reference-state capture.",
+            "Reference states may still be planned or pending_capture scaffolds rather than captured Blackhole targets.",
         ],
     }
 
@@ -612,7 +898,18 @@ def main() -> int:
 
     print(f"Created measurement planning run: {run_dir}")
     print(f"Wrote summary: {summary_path}")
-    print(f"Discovered case IDs: {', '.join(discovered_case_ids) if discovered_case_ids else '(none)'}")
+    print(
+        "Discovered case IDs: "
+        + (", ".join(discovered_case_ids) if discovered_case_ids else "(none)")
+    )
+    print(
+        "Reference states used: "
+        + (
+            ", ".join(reference_state_usage["referenceStateIds"])
+            if reference_state_usage["referenceStateIds"]
+            else "(none)"
+        )
+    )
     print("No renders were executed.")
     return 0
 

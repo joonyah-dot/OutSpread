@@ -7,7 +7,7 @@
   "channels": 1,
   "renderSeconds": 6.0,
   "paramsByName": {},
-  "referenceStateId": "pending_reference_capture",
+  "referenceStateId": "blackhole_width_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "width",
   "scaffoldOnly": true,

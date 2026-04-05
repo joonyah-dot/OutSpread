@@ -6,7 +6,7 @@
   },
   "renderSeconds": 15.0,
   "paramsByName": {},
-  "referenceStateId": "pending_reference_capture",
+  "referenceStateId": "blackhole_modulation_probe",
   "expectedDeterminism": "time_varying_target_expected",
   "analysisProfile": "modulation",
   "scaffoldOnly": true,

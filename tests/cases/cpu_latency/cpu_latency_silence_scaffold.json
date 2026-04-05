@@ -7,7 +7,7 @@
   "blockSize": 1024,
   "renderSeconds": 10.0,
   "paramsByName": {},
-  "referenceStateId": "pending_reference_capture",
+  "referenceStateId": "blackhole_cpu_latency_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "cpu_latency",
   "scaffoldOnly": true,

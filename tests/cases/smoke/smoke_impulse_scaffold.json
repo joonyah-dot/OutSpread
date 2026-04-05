@@ -5,7 +5,7 @@
     "stimulusId": "impulse"
   },
   "paramsByName": {},
-  "referenceStateId": "pending_reference_capture",
+  "referenceStateId": "blackhole_smoke_default",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "smoke",
   "scaffoldOnly": true,

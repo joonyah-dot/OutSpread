@@ -3,6 +3,7 @@
   "manifestId": "outspread.measurement_cases",
   "description": "Baseline manifest-driven measurement workflow scaffold for OutSpread M1.",
   "stimuliManifestPath": "tests/_generated/stimuli/stimuli_manifest.json",
+  "referenceStateManifestPath": "tests/reference_states/reference_state_manifest.json",
   "groups": [
     {
       "name": "smoke",
@@ -90,7 +91,8 @@
     "required": [
       "id",
       "group",
-      "input"
+      "input",
+      "referenceStateId"
     ],
     "preferred": [
       "paramsByName"

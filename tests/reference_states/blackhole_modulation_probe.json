@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_modulation_probe",
+  "status": "pending_capture",
+  "description": "Reusable Blackhole modulation target state for future motion and depth capture work.",
+  "targetGroups": [
+    "modulation"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This file reserves a stable modulation-state ID for future capture tickets.",
+    "It does not contain captured Blackhole modulation settings yet."
+  ]
+}

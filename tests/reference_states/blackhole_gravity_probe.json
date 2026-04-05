@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_gravity_probe",
+  "status": "pending_capture",
+  "description": "Reusable Blackhole Gravity target state for negative, center, and positive behavior capture planning.",
+  "targetGroups": [
+    "gravity"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This state is intentionally empty until real Gravity captures are performed.",
+    "Future capture work may split this into multiple reusable states if needed."
+  ]
+}

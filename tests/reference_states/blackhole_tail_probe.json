@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_tail_probe",
+  "status": "pending_capture",
+  "description": "Reusable Blackhole tail and density target state for long-decay comparison work.",
+  "targetGroups": [
+    "tail"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This is a planned reusable tail state, not a captured one.",
+    "Exact Blackhole decay-state parameters still need to be recorded."
+  ]
+}

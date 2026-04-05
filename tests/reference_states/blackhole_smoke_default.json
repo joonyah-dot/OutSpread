@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_smoke_default",
+  "status": "pending_capture",
+  "description": "Reusable baseline Blackhole smoke state for simple load and render-path checks.",
+  "targetGroups": [
+    "smoke"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This file does not contain captured Blackhole parameters yet.",
+    "It exists so smoke cases can reference a stable reusable target-state ID."
+  ]
+}

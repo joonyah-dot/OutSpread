@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_cpu_latency_probe",
+  "status": "planned",
+  "description": "Reusable Blackhole baseline state intended for future cpu and latency observation work.",
+  "targetGroups": [
+    "cpu_latency"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This state is a reusable planning placeholder rather than a captured runtime state.",
+    "Future tickets should document the exact reference state used for cpu and latency observation."
+  ]
+}

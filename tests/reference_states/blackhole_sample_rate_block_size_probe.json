@@ -1,0 +1,21 @@
+{
+  "id": "blackhole_sample_rate_block_size_probe",
+  "status": "planned",
+  "description": "Reusable Blackhole baseline state intended for future sample-rate and block-size comparability checks.",
+  "targetGroups": [
+    "sample_rate_block_size"
+  ],
+  "sourceType": "planned_blackhole_capture",
+  "referenceLock": {
+    "pluginVersion": null,
+    "platform": null,
+    "hostOrRenderPath": null,
+    "baselineSampleRate": 48000,
+    "baselineBlockSize": 256
+  },
+  "paramsByName": {},
+  "notes": [
+    "This state is still at planning level and has not been captured yet.",
+    "It anchors sample-rate/block-size cases to one reusable baseline target ID."
+  ]
+}
