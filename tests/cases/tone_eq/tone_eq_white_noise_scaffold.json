@@ -1,0 +1,14 @@
+{
+  "id": "tone_eq_white_noise_scaffold",
+  "group": "tone_eq",
+  "input": {
+    "stimulusId": "white_noise_burst"
+  },
+  "renderSeconds": 10.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic_input",
+  "analysisProfile": "tone_eq",
+  "scaffoldOnly": true,
+  "notes": "Planning-only tone/eq case placeholder pending captured low tone, high tone, and resonance states."
+}

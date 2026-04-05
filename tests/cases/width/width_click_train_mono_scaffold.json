@@ -1,0 +1,15 @@
+{
+  "id": "width_click_train_mono_scaffold",
+  "group": "width",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "channels": 1,
+  "renderSeconds": 6.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "width",
+  "scaffoldOnly": true,
+  "notes": "Planning-only mono-input width case placeholder pending captured stereo-spread reference state."
+}

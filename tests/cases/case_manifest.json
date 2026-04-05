@@ -1,7 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "manifestId": "outspread.measurement_cases",
-  "description": "Baseline measurement workflow scaffold for OutSpread M1.",
+  "description": "Baseline manifest-driven measurement workflow scaffold for OutSpread M1.",
+  "stimuliManifestPath": "tests/_generated/stimuli/stimuli_manifest.json",
   "groups": [
     {
       "name": "smoke",
@@ -71,6 +72,20 @@
     "warmupMs": 50,
     "renderSeconds": 2.0
   },
+  "groupSummaryFiles": {
+    "smoke": "smoke_summary.json",
+    "attack": "attack_summary.json",
+    "tail": "tail_summary.json",
+    "gravity": "gravity_summary.json",
+    "size": "size_summary.json",
+    "tone_eq": "tone_eq_summary.json",
+    "modulation": "modulation_summary.json",
+    "width": "width_summary.json",
+    "freeze_infinite": "freeze_summary.json",
+    "predelay": "predelay_summary.json",
+    "sample_rate_block_size": "sample_rate_summary.json",
+    "cpu_latency": "cpu_latency_summary.json"
+  },
   "caseFields": {
     "required": [
       "id",
@@ -94,6 +109,7 @@
       "expectedDeterminism",
       "analysisProfile",
       "expectedOutputs",
+      "scaffoldOnly",
       "paramsByIndex"
     ]
   },

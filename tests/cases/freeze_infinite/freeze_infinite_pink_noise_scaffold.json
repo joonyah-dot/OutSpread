@@ -1,0 +1,14 @@
+{
+  "id": "freeze_infinite_pink_noise_scaffold",
+  "group": "freeze_infinite",
+  "input": {
+    "stimulusId": "pink_noise_burst"
+  },
+  "renderSeconds": 60.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "time_varying_target_expected",
+  "analysisProfile": "freeze_infinite",
+  "scaffoldOnly": true,
+  "notes": "Planning-only long-run freeze/infinite case placeholder pending captured reference latch states."
+}

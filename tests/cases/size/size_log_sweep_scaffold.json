@@ -1,0 +1,14 @@
+{
+  "id": "size_log_sweep_scaffold",
+  "group": "size",
+  "input": {
+    "stimulusId": "log_sweep"
+  },
+  "renderSeconds": 12.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "size",
+  "scaffoldOnly": true,
+  "notes": "Planning-only size case placeholder pending captured reference states."
+}

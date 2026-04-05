@@ -1,0 +1,14 @@
+{
+  "id": "modulation_sine_1khz_scaffold",
+  "group": "modulation",
+  "input": {
+    "stimulusId": "sine_1khz"
+  },
+  "renderSeconds": 15.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "time_varying_target_expected",
+  "analysisProfile": "modulation",
+  "scaffoldOnly": true,
+  "notes": "Planning-only modulation case. This is not a captured reference state and does not imply sample-identical target behavior."
+}

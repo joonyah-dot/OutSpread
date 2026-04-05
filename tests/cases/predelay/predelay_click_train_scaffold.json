@@ -1,0 +1,14 @@
+{
+  "id": "predelay_click_train_scaffold",
+  "group": "predelay",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "renderSeconds": 4.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "predelay",
+  "scaffoldOnly": true,
+  "notes": "Planning-only predelay case placeholder pending exact predelay reference-state capture."
+}

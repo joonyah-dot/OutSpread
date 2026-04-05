@@ -1,0 +1,15 @@
+{
+  "id": "sample_rate_block_size_impulse_scaffold",
+  "group": "sample_rate_block_size",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "sampleRate": 96000,
+  "blockSize": 512,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "sample_rate_block_size",
+  "scaffoldOnly": true,
+  "notes": "Planning-only sample-rate/block-size case that exercises manifest override resolution."
+}

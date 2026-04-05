@@ -1,0 +1,14 @@
+{
+  "id": "gravity_click_train_scaffold",
+  "group": "gravity",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "renderSeconds": 8.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "gravity",
+  "scaffoldOnly": true,
+  "notes": "Planning-only gravity case placeholder pending measured negative, center, and positive reference states."
+}

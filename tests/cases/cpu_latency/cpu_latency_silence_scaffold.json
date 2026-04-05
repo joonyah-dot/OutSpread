@@ -1,0 +1,15 @@
+{
+  "id": "cpu_latency_silence_scaffold",
+  "group": "cpu_latency",
+  "input": {
+    "stimulusId": "silence"
+  },
+  "blockSize": 1024,
+  "renderSeconds": 10.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "cpu_latency",
+  "scaffoldOnly": true,
+  "notes": "Planning-only cpu/latency case placeholder pending real runtime capture."
+}

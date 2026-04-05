@@ -1,0 +1,14 @@
+{
+  "id": "attack_click_train_scaffold",
+  "group": "attack",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "renderSeconds": 6.0,
+  "paramsByName": {},
+  "referenceStateId": "pending_reference_capture",
+  "expectedDeterminism": "deterministic",
+  "analysisProfile": "attack",
+  "scaffoldOnly": true,
+  "notes": "Planning-only attack case. Final Blackhole attack state capture is still pending."
+}
