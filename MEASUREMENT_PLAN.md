@@ -38,6 +38,19 @@ Meaningful comparisons must emit saved artifacts. Listening is required, but lis
 
 Case-group names, summary-file names, and acceptance logic must stay stable across tickets unless this document is updated.
 
+## Reference Lock
+
+The project starts from the current shipping Blackhole target, but baseline capture must lock that target to an explicit recorded reference.
+
+The first baseline reference pass must record:
+
+- Blackhole plugin version under test: `<record exact product version string from the captured reference build>`
+- platform and OS used for capture: `<record exact OS, version, and architecture>`
+- host or render path assumptions: `<record exact host name and version, or the exact harness render path used>`
+- baseline workflow assumptions: 48 kHz, 256 sample blocks, stereo render path, and the default warmup/render rules in this document unless a case records an explicit override
+
+Once baseline captures exist, the project must not silently drift to a newer "current shipping" Blackhole target. Any change to the locked reference version, platform, or render-path assumptions must update this section and must be accompanied by a documented re-baseline note in the same change.
+
 ## Intended Repo Structure
 
 The measurement workflow should converge on the following layout:
@@ -89,8 +102,9 @@ Future case files under `tests/cases` should stay compatible with the current ha
 - input
 - warmupMs
 - renderSeconds
-- paramsByName
-- paramsByIndex
+- parameter assignment data
+
+`paramsByName` is the default source of truth and should be used unless the harness or a compatibility need requires index-based assignment. `paramsByIndex` is optional and should only appear when that compatibility need is real. Do not duplicate the same parameter definitions in both fields by default.
 
 If the runner supports metadata fields such as `id`, `group`, `notes`, or `expectedOutputs`, those fields should remain additive and should not break the base shape above.
 
@@ -130,6 +144,16 @@ Expanded validation must include:
 - 256 sample blocks
 - 512 sample blocks
 - 1024 sample blocks
+
+## Determinism Expectations
+
+Repeated renders do not all need the same acceptance method.
+
+Technical and low-variability cases should be meaningfully deterministic when plugin version, platform, host or harness path, sample rate, block size, input, and parameter state are held constant. This includes smoke, predelay, many attack cases, and static tone or routing checks. These cases may use exact or near-exact repeatability checks when that helps detect regressions.
+
+Modulation-heavy or otherwise time-varying cases may not be sample-identical across repeated renders even when the behavior is still correct. This includes modulation cases, some width cases, long-tail Freeze/Infinite cases, and any case where the reference itself is not meaningfully sample-repeatable. For these cases, acceptance should prefer stable proxy metrics, envelope and spectral summaries, stereo statistics, bounded repeatability expectations, and listening review rather than sample-identical null tests.
+
+If a case is expected to be non-deterministic, the case definition or analysis path should say so explicitly.
 
 ## Stimulus Set
 
@@ -368,6 +392,17 @@ Expected per-case artifacts:
 - baseline settings
 - pass/fail summary
 - paths to each group summary file
+
+## Historical Comparability
+
+Once baseline captures exist, historical comparability becomes part of the measurement contract.
+
+- default stimuli must not be silently changed
+- core case names must not be silently changed
+- required summary file names must not be silently changed
+- any necessary change to stimuli, core case names, or summary-file names must include a migration note or comparability note explaining how old and new runs should be compared
+
+This rule reinforces the maintenance rules below. It does not replace them.
 
 ## Initial Acceptance Thresholds
 

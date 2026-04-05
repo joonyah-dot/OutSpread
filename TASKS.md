@@ -45,6 +45,7 @@ Create a repeatable scripted path to render the current shipping Blackhole refer
 - Define generated stimulus handling under `tests/_generated`.
 - Define the timestamped artifact layout under `artifacts/measurements/<timestamp>/`.
 - Add scripted reference renders for the current shipping Blackhole VST3 at baseline settings.
+- Save or document the exact Blackhole parameter states used in the baseline reference suite in a form that can be reused by `tests/cases` rather than recreated ad hoc in later tickets.
 - Add initial grouped cases for smoke, attack, tail, gravity, size, tone/eq, modulation, width, freeze/infinite, predelay, sample-rate/block-size, and cpu/latency.
 - Emit the required rollups: `attack_summary.json`, `tail_summary.json`, `gravity_summary.json`, `width_summary.json`, `modulation_summary.json`, `freeze_summary.json`, `predelay_summary.json`, `sample_rate_summary.json`, `cpu_latency_summary.json`, and `summary.json`.
 
@@ -53,6 +54,7 @@ Create a repeatable scripted path to render the current shipping Blackhole refer
 - One scripted run can render the reference suite at baseline settings.
 - Artifacts land in a stable timestamped folder with the required rollup files.
 - Case names, group names, and case schema are stable enough to support future automated comparison.
+- The exact reference states used for baseline capture are saved or documented in a case-compatible form that future tickets can reuse.
 
 ## M2 - Shell Plugin
 

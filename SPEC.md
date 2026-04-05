@@ -12,6 +12,8 @@ The reference product is the current shipping native Eventide Blackhole plugin u
 
 The reference standard is the current shipping behavior, including current Freeze/Infinite behavior. OutSpread does not target a presumed legacy infinite mode, forum description, or memory of older releases. When assumptions disagree with the current shipping Blackhole result, the current shipping Blackhole result wins.
 
+The exact baseline reference version, platform, render path assumptions, and baseline capture settings must be recorded in the Reference Lock section of `MEASUREMENT_PLAN.md`. Once baseline captures exist, the project stays locked to that documented baseline until the reference lock is deliberately updated.
+
 ## Primary Goal
 
 The primary goal of OutSpread v1 is to reproduce the sound, control feel, and edge-case behavior of the current shipping Blackhole plugin closely enough that structured A/B comparison is difficult on the core measurement and listening set.
@@ -75,6 +77,8 @@ The following control domains are sound-critical and must exist as functional eq
 - Kill
 
 Parameter names may differ for product reasons, but parameter behavior must remain reference-matched.
+
+Kill intent for planning purposes is explicit even if final product naming changes. Kill is a wet-path control: it stops new signal from feeding the reverb tank and forces existing wet energy to clear or mute as quickly as the design allows, while leaving the dry path behavior unchanged. In mixed operation, dry signal must continue. In 100 percent wet operation, Kill should behave as an immediate reverb stop rather than a global output mute.
 
 ## Sound-Critical Behaviors
 
