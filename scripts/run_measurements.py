@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Manifest-driven measurement planning runner for OutSpread M1."""
+"""Manifest-driven measurement runner for OutSpread M1 reference capture work."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import subprocess
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +30,18 @@ def load_json(path: Path) -> dict:
     return value
 
 
+def write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+        handle.write("\n")
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def parse_csv_arg(raw: str | None) -> list[str]:
     if raw is None:
         return []
@@ -44,6 +58,8 @@ def parse_multi_csv_args(raw_values: list[str] | None) -> list[str]:
 
 
 def normalize_notes(value: object, context: str) -> list[str]:
+    if value is None:
+        return []
     if isinstance(value, str):
         return [value]
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
@@ -51,14 +67,26 @@ def normalize_notes(value: object, context: str) -> list[str]:
     raise SystemExit(f"error: {context} must be a string or a list of strings.")
 
 
+def timestamp_slug() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def iso_now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Plan manifest-driven OutSpread measurement runs without rendering audio."
+        description=(
+            "Plan or execute manifest-driven OutSpread reference capture runs. "
+            "Planning mode is the default."
+        )
     )
     parser.add_argument(
         "--mode",
-        default="scaffold",
-        help="Execution mode. Only 'scaffold' is implemented in this ticket.",
+        choices=("plan", "scaffold"),
+        default="plan",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--manifest",
@@ -90,18 +118,31 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--reference-plugin",
-        help="Optional reference plugin identifier or path.",
+        help="Path to the reference VST3 plugin bundle to plan or execute against.",
+    )
+    parser.add_argument(
+        "--harness",
+        help="Path to the render harness executable, such as vst3_harness.exe.",
+    )
+    parser.add_argument(
+        "--execute-reference",
+        action="store_true",
+        help="Actually run reference capture commands instead of planning only.",
+    )
+    parser.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="Continue executing later cases after a case fails.",
     )
     return parser.parse_args()
 
 
-def ensure_supported_mode(mode: str) -> None:
-    if mode == "scaffold":
-        return
-    raise SystemExit(
-        f"error: mode '{mode}' is not implemented in this ticket. "
-        "Use scaffold mode to create planning artifacts without real renders."
-    )
+def resolve_execution_mode(args: argparse.Namespace) -> str:
+    if args.execute_reference:
+        return "execute_reference"
+    if args.mode in ("plan", "scaffold"):
+        return "planning"
+    raise SystemExit(f"error: unsupported mode: {args.mode}")
 
 
 def default_group_summary_file(group_name: str) -> str:
@@ -605,14 +646,88 @@ def load_declared_cases(
     return discovered_cases, discovered_case_ids
 
 
+def resolve_cli_path(repo_root: Path, raw_path: str) -> Path:
+    candidate = Path(raw_path).expanduser()
+    return (
+        candidate.resolve()
+        if candidate.is_absolute()
+        else (repo_root / candidate).resolve()
+    )
+
+
+def resolve_reference_plugin(repo_root: Path, raw_path: str | None) -> dict | None:
+    if raw_path is None:
+        return None
+    path = resolve_cli_path(repo_root, raw_path)
+    if not path.exists():
+        raise SystemExit(f"error: reference plugin path does not exist: {path}")
+    if path.suffix.lower() != ".vst3":
+        raise SystemExit(
+            f"error: reference plugin path must point to a .vst3 bundle or file: {path}"
+        )
+    if not (path.is_dir() or path.is_file()):
+        raise SystemExit(
+            f"error: reference plugin path is not a usable file or directory: {path}"
+        )
+    return {
+        "input": raw_path,
+        "resolvedPath": str(path.as_posix()),
+        "name": path.name,
+        "pathType": "directory" if path.is_dir() else "file",
+        "format": "vst3",
+    }
+
+
+def resolve_harness(repo_root: Path, raw_path: str | None) -> dict | None:
+    if raw_path is None:
+        return None
+    path = resolve_cli_path(repo_root, raw_path)
+    if not path.exists():
+        raise SystemExit(f"error: harness path does not exist: {path}")
+    if not path.is_file():
+        raise SystemExit(f"error: harness path must point to a file: {path}")
+    return {
+        "input": raw_path,
+        "resolvedPath": str(path.as_posix()),
+        "name": path.name,
+        "toolKind": "vst3_harness"
+        if "harness" in path.name.lower()
+        else "external_render_tool",
+    }
+
+
+def validate_execution_prerequisites(
+    execution_mode: str,
+    reference_plugin: dict | None,
+    harness: dict | None,
+) -> None:
+    if execution_mode != "execute_reference":
+        return
+    if reference_plugin is None:
+        raise SystemExit(
+            "error: --execute-reference requires --reference-plugin with a valid .vst3 path."
+        )
+    if harness is None:
+        raise SystemExit(
+            "error: --execute-reference requires --harness with a valid harness executable path."
+        )
+
+
 def build_expected_artifacts(run_dir: Path, case_id: str) -> dict:
     case_dir = run_dir / "cases" / case_id
+    reference_dir = case_dir / "reference"
     return {
         "caseDirectory": str(case_dir.as_posix()),
         "casePlanPath": str((case_dir / "case_plan.json").as_posix()),
-        "referenceRenderPath": str((case_dir / "reference_render.wav").as_posix()),
-        "pluginRenderPath": str((case_dir / "plugin_render.wav").as_posix()),
-        "metricsPath": str((case_dir / "metrics.json").as_posix()),
+        "referenceCapturePath": str((case_dir / "reference_capture.json").as_posix()),
+        "referenceCasePath": str((case_dir / "reference_case.json").as_posix()),
+        "referenceDirectory": str(reference_dir.as_posix()),
+        "referenceWetPath": str((reference_dir / "wet.wav").as_posix()),
+        "referenceMetricsPath": str((reference_dir / "metrics.json").as_posix()),
+        "renderStdoutPath": str((reference_dir / "render_stdout.txt").as_posix()),
+        "renderStderrPath": str((reference_dir / "render_stderr.txt").as_posix()),
+        "analyzeStdoutPath": str((reference_dir / "analyze_stdout.txt").as_posix()),
+        "analyzeStderrPath": str((reference_dir / "analyze_stderr.txt").as_posix()),
     }
 
 
@@ -620,75 +735,494 @@ def resolve_case_settings(
     baseline_defaults: dict,
     case_data: dict,
     plugin_under_test: str | None,
-    reference_plugin: str | None,
 ) -> dict:
     resolved = dict(baseline_defaults)
     for key in baseline_defaults:
         if key in case_data:
             resolved[key] = case_data[key]
 
-    resolved["pluginUnderTest"] = case_data.get("plugin", plugin_under_test)
-    resolved["referencePlugin"] = case_data.get("referencePlugin", reference_plugin)
-    resolved["paramsByName"] = case_data.get("paramsByName", {})
-    resolved["paramsByIndex"] = case_data.get("paramsByIndex", {})
+    resolved["pluginUnderTest"] = plugin_under_test
     return resolved
 
 
-def write_case_plans(
+def validate_resolved_settings(case_id: str, settings: dict) -> None:
+    int_fields = {
+        "sampleRate": 1,
+        "blockSize": 1,
+        "channels": 1,
+        "warmupMs": 0,
+    }
+    for field_name, minimum in int_fields.items():
+        value = settings.get(field_name)
+        if not isinstance(value, int) or value < minimum:
+            comparator = "non-negative" if minimum == 0 else "positive"
+            raise SystemExit(
+                f"error: case '{case_id}' resolved field '{field_name}' must be a {comparator} integer."
+            )
+
+    render_seconds = settings.get("renderSeconds")
+    if not isinstance(render_seconds, (int, float)) or render_seconds <= 0:
+        raise SystemExit(
+            f"error: case '{case_id}' resolved field 'renderSeconds' must be a positive number."
+        )
+
+
+def resolve_parameter_assignment(case_data: dict, reference_state: dict) -> dict:
+    state_by_name = dict(reference_state.get("paramsByName", {}))
+    state_by_index = dict(reference_state.get("paramsByIndex", {}))
+    case_by_name = dict(case_data.get("paramsByName", {}))
+    case_by_index = dict(case_data.get("paramsByIndex", {}))
+
+    merged_by_name = dict(state_by_name)
+    merged_by_name.update(case_by_name)
+
+    merged_by_index = dict(state_by_index)
+    merged_by_index.update(case_by_index)
+
+    has_state_params = bool(state_by_name or state_by_index)
+    has_case_params = bool(case_by_name or case_by_index)
+    if has_state_params and has_case_params:
+        source = "merged_reference_state_and_case_override"
+    elif has_state_params:
+        source = "reference_state"
+    elif has_case_params:
+        source = "case_override"
+    else:
+        source = "none"
+
+    return {
+        "source": source,
+        "referenceStateHasParameters": has_state_params,
+        "caseHasParameters": has_case_params,
+        "paramsByName": merged_by_name,
+        "paramsByIndex": merged_by_index,
+    }
+
+
+def build_harness_case_payload(settings: dict, parameters: dict) -> dict:
+    payload: dict[str, object] = {
+        "warmupMs": settings["warmupMs"],
+        "renderSeconds": settings["renderSeconds"],
+        "paramsByName": parameters["paramsByName"],
+    }
+    if parameters["paramsByIndex"]:
+        payload["paramsByIndex"] = parameters["paramsByIndex"]
+    return payload
+
+
+def command_entry(
+    name: str,
+    executable: str | None,
+    args: list[str],
+    stdout_path: str,
+    stderr_path: str,
+    expected_output_paths: list[str],
+    missing_prerequisites: list[str],
+) -> dict:
+    argv = [executable if executable is not None else "<missing_executable>"] + args
+    return {
+        "name": name,
+        "argv": argv,
+        "stdoutPath": stdout_path,
+        "stderrPath": stderr_path,
+        "expectedOutputPaths": expected_output_paths,
+        "runnable": not missing_prerequisites,
+        "missingPrerequisites": missing_prerequisites,
+    }
+
+
+def build_reference_render_plan(
+    case_id: str,
+    resolved_input: dict,
+    settings: dict,
+    reference_plugin: dict | None,
+    harness: dict | None,
+    expected_artifacts: dict,
+) -> dict:
+    missing_prerequisites: list[str] = []
+    if harness is None:
+        missing_prerequisites.append("harness")
+    if reference_plugin is None:
+        missing_prerequisites.append("reference_plugin")
+
+    harness_path = harness["resolvedPath"] if harness else None
+    plugin_path = reference_plugin["resolvedPath"] if reference_plugin else None
+
+    render_args = [
+        "render",
+        "--plugin",
+        plugin_path if plugin_path is not None else "<reference_plugin_required>",
+        "--in",
+        resolved_input["resolvedPath"],
+        "--outdir",
+        expected_artifacts["referenceDirectory"],
+        "--sr",
+        str(settings["sampleRate"]),
+        "--bs",
+        str(settings["blockSize"]),
+        "--ch",
+        str(settings["channels"]),
+        "--case",
+        expected_artifacts["referenceCasePath"],
+    ]
+    analyze_args = [
+        "analyze",
+        "--dry",
+        resolved_input["resolvedPath"],
+        "--wet",
+        expected_artifacts["referenceWetPath"],
+        "--outdir",
+        expected_artifacts["referenceDirectory"],
+        "--auto-align",
+        "--null",
+    ]
+
+    commands = [
+        command_entry(
+            name="render",
+            executable=harness_path,
+            args=render_args,
+            stdout_path=expected_artifacts["renderStdoutPath"],
+            stderr_path=expected_artifacts["renderStderrPath"],
+            expected_output_paths=[expected_artifacts["referenceWetPath"]],
+            missing_prerequisites=missing_prerequisites,
+        ),
+        command_entry(
+            name="analyze",
+            executable=harness_path,
+            args=analyze_args,
+            stdout_path=expected_artifacts["analyzeStdoutPath"],
+            stderr_path=expected_artifacts["analyzeStderrPath"],
+            expected_output_paths=[expected_artifacts["referenceMetricsPath"]],
+            missing_prerequisites=missing_prerequisites,
+        ),
+    ]
+
+    return {
+        "runner": "vst3_harness",
+        "referenceCaseId": case_id,
+        "referencePluginPath": plugin_path,
+        "harnessPath": harness_path,
+        "runnable": not missing_prerequisites,
+        "missingPrerequisites": missing_prerequisites,
+        "commands": commands,
+    }
+
+
+def build_case_record(
+    run_dir: Path,
+    group_name: str,
+    case_record: dict,
+    baseline_defaults: dict,
+    plugin_under_test: str | None,
+    reference_plugin: dict | None,
+    harness: dict | None,
+    execution_mode: str,
+) -> dict:
+    case_data = case_record["caseData"]
+    case_id = case_data["id"]
+    expected_artifacts = build_expected_artifacts(run_dir, case_id)
+    settings = resolve_case_settings(
+        baseline_defaults,
+        case_data,
+        plugin_under_test,
+    )
+    validate_resolved_settings(case_id, settings)
+    parameters = resolve_parameter_assignment(
+        case_data,
+        case_record["resolvedReferenceState"],
+    )
+    reference_render_plan = build_reference_render_plan(
+        case_id,
+        case_record["resolvedInput"],
+        settings,
+        reference_plugin,
+        harness,
+        expected_artifacts,
+    )
+
+    notes = normalize_notes(
+        case_data.get("notes"),
+        f"case file {case_record['caseFilePath']} field 'notes'",
+    )
+    if case_record["resolvedReferenceState"]["status"] != "captured":
+        notes.append(
+            "This case is linked to a reference state that is not yet marked captured."
+        )
+
+    return {
+        "schemaVersion": 1,
+        "caseId": case_id,
+        "group": group_name,
+        "caseFilePath": case_record["caseFilePath"],
+        "analysisProfile": case_data.get("analysisProfile", group_name),
+        "expectedDeterminism": case_data.get("expectedDeterminism"),
+        "scaffoldOnly": bool(case_data.get("scaffoldOnly", True)),
+        "resolvedInput": case_record["resolvedInput"],
+        "resolvedSettings": settings,
+        "resolvedParameters": parameters,
+        "referenceStateId": case_data["referenceStateId"],
+        "referenceStateStatus": case_record["resolvedReferenceState"]["status"],
+        "resolvedReferenceState": case_record["resolvedReferenceState"],
+        "resolvedReferencePlugin": reference_plugin,
+        "resolvedHarness": harness,
+        "expectedArtifacts": expected_artifacts,
+        "referenceRenderPlan": reference_render_plan,
+        "executionMode": execution_mode,
+        "executionStatus": "planned",
+        "rendersExecuted": False,
+        "executionResult": {
+            "attempted": False,
+            "startedAt": None,
+            "finishedAt": None,
+            "steps": [],
+            "failureReason": None,
+        },
+        "notes": notes,
+        "harnessCasePayload": build_harness_case_payload(settings, parameters),
+    }
+
+
+def prepare_cases(
     run_dir: Path,
     group_cases: dict[str, list[dict]],
     baseline_defaults: dict,
     plugin_under_test: str | None,
-    reference_plugin: str | None,
-) -> dict[str, list[dict]]:
-    planned_cases_by_group: dict[str, list[dict]] = {}
+    reference_plugin: dict | None,
+    harness: dict | None,
+    execution_mode: str,
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    prepared_by_group: dict[str, list[dict]] = {}
+    flat_cases: list[dict] = []
     for group_name, cases in group_cases.items():
-        planned_cases_by_group[group_name] = []
+        prepared_by_group[group_name] = []
         for case_record in cases:
-            case_data = case_record["caseData"]
-            case_id = case_data["id"]
-            expected_artifacts = build_expected_artifacts(run_dir, case_id)
-            case_dir = Path(expected_artifacts["caseDirectory"])
-            case_dir.mkdir(parents=True, exist_ok=True)
-
-            plan = {
-                "schemaVersion": 1,
-                "status": "planned_only",
-                "rendersExecuted": False,
-                "scaffoldOnly": bool(case_data.get("scaffoldOnly", True)),
-                "caseId": case_id,
-                "group": group_name,
-                "caseFilePath": case_record["caseFilePath"],
-                "resolvedInput": case_record["resolvedInput"],
-                "resolvedSettings": resolve_case_settings(
-                    baseline_defaults,
-                    case_data,
-                    plugin_under_test,
-                    reference_plugin,
-                ),
-                "analysisProfile": case_data.get("analysisProfile", group_name),
-                "expectedDeterminism": case_data.get("expectedDeterminism"),
-                "referenceStateId": case_data.get("referenceStateId"),
-                "referenceStateStatus": case_record["resolvedReferenceState"]["status"],
-                "resolvedReferenceState": case_record["resolvedReferenceState"],
-                "notes": case_data.get("notes"),
-                "expectedArtifacts": expected_artifacts,
-            }
-
-            case_plan_path = Path(expected_artifacts["casePlanPath"])
-            with case_plan_path.open("w", encoding="utf-8") as handle:
-                json.dump(plan, handle, indent=2)
-                handle.write("\n")
-
-            planned_cases_by_group[group_name].append(plan)
-    return planned_cases_by_group
+            prepared = build_case_record(
+                run_dir,
+                group_name,
+                case_record,
+                baseline_defaults,
+                plugin_under_test,
+                reference_plugin,
+                harness,
+                execution_mode,
+            )
+            prepared_by_group[group_name].append(prepared)
+            flat_cases.append(prepared)
+    return prepared_by_group, flat_cases
 
 
-def summarize_reference_state_usage(
-    planned_cases: list[dict], allowed_statuses: list[str]
-) -> dict:
+def build_case_plan_payload(case: dict) -> dict:
+    return {
+        "schemaVersion": 1,
+        "caseId": case["caseId"],
+        "group": case["group"],
+        "caseFilePath": case["caseFilePath"],
+        "analysisProfile": case["analysisProfile"],
+        "expectedDeterminism": case["expectedDeterminism"],
+        "scaffoldOnly": case["scaffoldOnly"],
+        "resolvedInput": case["resolvedInput"],
+        "resolvedSettings": case["resolvedSettings"],
+        "resolvedParameters": case["resolvedParameters"],
+        "referenceStateId": case["referenceStateId"],
+        "referenceStateStatus": case["referenceStateStatus"],
+        "resolvedReferenceState": case["resolvedReferenceState"],
+        "resolvedReferencePlugin": case["resolvedReferencePlugin"],
+        "resolvedHarness": case["resolvedHarness"],
+        "expectedArtifacts": case["expectedArtifacts"],
+        "referenceRenderPlan": case["referenceRenderPlan"],
+        "executionMode": case["executionMode"],
+        "executionStatus": case["executionStatus"],
+        "rendersExecuted": case["rendersExecuted"],
+        "executionResult": case["executionResult"],
+        "referenceCapturePath": case["expectedArtifacts"]["referenceCapturePath"],
+        "notes": case["notes"],
+    }
+
+
+def build_reference_capture_payload(case: dict) -> dict:
+    return {
+        "schemaVersion": 1,
+        "caseId": case["caseId"],
+        "group": case["group"],
+        "executionMode": case["executionMode"],
+        "executionStatus": case["executionStatus"],
+        "rendersExecuted": case["rendersExecuted"],
+        "resolvedInput": case["resolvedInput"],
+        "resolvedSettings": case["resolvedSettings"],
+        "resolvedParameters": case["resolvedParameters"],
+        "referenceStateId": case["referenceStateId"],
+        "referenceStateStatus": case["referenceStateStatus"],
+        "resolvedReferenceState": case["resolvedReferenceState"],
+        "resolvedReferencePlugin": case["resolvedReferencePlugin"],
+        "resolvedHarness": case["resolvedHarness"],
+        "referenceRenderPlan": case["referenceRenderPlan"],
+        "expectedArtifacts": case["expectedArtifacts"],
+        "executionResult": case["executionResult"],
+        "notes": case["notes"],
+    }
+
+
+def write_case_artifacts(cases: list[dict]) -> None:
+    for case in cases:
+        case_dir = Path(case["expectedArtifacts"]["caseDirectory"])
+        reference_dir = Path(case["expectedArtifacts"]["referenceDirectory"])
+        case_dir.mkdir(parents=True, exist_ok=True)
+        reference_dir.mkdir(parents=True, exist_ok=True)
+
+        write_json(
+            Path(case["expectedArtifacts"]["referenceCasePath"]),
+            case["harnessCasePayload"],
+        )
+        write_json(
+            Path(case["expectedArtifacts"]["casePlanPath"]),
+            build_case_plan_payload(case),
+        )
+        write_json(
+            Path(case["expectedArtifacts"]["referenceCapturePath"]),
+            build_reference_capture_payload(case),
+        )
+
+
+def run_command(command: dict, repo_root: Path) -> dict:
+    stdout_path = Path(command["stdoutPath"])
+    stderr_path = Path(command["stderrPath"])
+    started_at = iso_now()
+    try:
+        completed = subprocess.run(
+            command["argv"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        stdout_text = completed.stdout or ""
+        stderr_text = completed.stderr or ""
+        exit_code = completed.returncode
+        invocation_error = None
+    except OSError as exc:
+        stdout_text = ""
+        stderr_text = str(exc)
+        exit_code = None
+        invocation_error = str(exc)
+
+    write_text(stdout_path, stdout_text)
+    write_text(stderr_path, stderr_text)
+
+    existing_outputs = [
+        path for path in command["expectedOutputPaths"] if Path(path).exists()
+    ]
+    missing_outputs = [
+        path for path in command["expectedOutputPaths"] if not Path(path).exists()
+    ]
+
+    if invocation_error is not None:
+        status = "failed"
+        failure_reason = invocation_error
+    elif exit_code != 0:
+        status = "failed"
+        failure_reason = f"command exited with code {exit_code}"
+    elif missing_outputs:
+        status = "failed"
+        failure_reason = "expected outputs missing after successful command exit"
+    else:
+        status = "success"
+        failure_reason = None
+
+    return {
+        "name": command["name"],
+        "argv": command["argv"],
+        "startedAt": started_at,
+        "finishedAt": iso_now(),
+        "status": status,
+        "exitCode": exit_code,
+        "stdoutPath": command["stdoutPath"],
+        "stderrPath": command["stderrPath"],
+        "actualOutputPaths": existing_outputs,
+        "missingExpectedOutputs": missing_outputs,
+        "failureReason": failure_reason,
+    }
+
+
+def mark_case_skipped(case: dict, reason: str) -> None:
+    case["executionStatus"] = "skipped"
+    case["rendersExecuted"] = False
+    case["executionResult"] = {
+        "attempted": False,
+        "startedAt": None,
+        "finishedAt": None,
+        "steps": [],
+        "failureReason": reason,
+    }
+    case["notes"] = list(case["notes"]) + [reason]
+
+
+def execute_reference_cases(
+    flat_cases: list[dict],
+    repo_root: Path,
+    keep_going: bool,
+) -> bool:
+    all_success = True
+    stop_index: int | None = None
+
+    for index, case in enumerate(flat_cases):
+        case["executionMode"] = "execute_reference"
+        case["executionResult"] = {
+            "attempted": True,
+            "startedAt": iso_now(),
+            "finishedAt": None,
+            "steps": [],
+            "failureReason": None,
+        }
+
+        render_plan = case["referenceRenderPlan"]
+        if not render_plan["runnable"]:
+            missing = ", ".join(render_plan["missingPrerequisites"])
+            case["executionStatus"] = "skipped"
+            case["executionResult"]["attempted"] = False
+            case["executionResult"]["failureReason"] = (
+                "execution prerequisites missing: " + missing
+            )
+            case["executionResult"]["finishedAt"] = iso_now()
+            all_success = False
+            if not keep_going:
+                stop_index = index + 1
+                break
+            continue
+
+        case["executionStatus"] = "executed_success"
+        for step in render_plan["commands"]:
+            step_result = run_command(step, repo_root)
+            case["executionResult"]["steps"].append(step_result)
+            if step["name"] == "render":
+                case["rendersExecuted"] = True
+
+            if step_result["status"] != "success":
+                case["executionStatus"] = "executed_failed"
+                case["executionResult"]["failureReason"] = step_result["failureReason"]
+                all_success = False
+                break
+
+        case["executionResult"]["finishedAt"] = iso_now()
+        if case["executionStatus"] == "executed_failed" and not keep_going:
+            stop_index = index + 1
+            break
+
+    if stop_index is not None:
+        for case in flat_cases[stop_index:]:
+            mark_case_skipped(
+                case,
+                "Case was not attempted because execution stopped after an earlier failure.",
+            )
+
+    return all_success
+
+
+def summarize_reference_state_usage(cases: list[dict], allowed_statuses: list[str]) -> dict:
     used_states: dict[str, dict] = {}
-    for case in planned_cases:
+    for case in cases:
         state = case["resolvedReferenceState"]
         used_states[state["id"]] = state
 
@@ -705,43 +1239,91 @@ def summarize_reference_state_usage(
     }
 
 
+def summarize_execution_statuses(cases: list[dict]) -> dict[str, int]:
+    counts = Counter(case["executionStatus"] for case in cases)
+    return {
+        "planned": counts.get("planned", 0),
+        "executed_success": counts.get("executed_success", 0),
+        "executed_failed": counts.get("executed_failed", 0),
+        "skipped": counts.get("skipped", 0),
+    }
+
+
+def compact_case_summary(case: dict) -> dict:
+    return {
+        "caseId": case["caseId"],
+        "executionStatus": case["executionStatus"],
+        "rendersExecuted": case["rendersExecuted"],
+        "referenceStateId": case["referenceStateId"],
+        "referenceStateStatus": case["referenceStateStatus"],
+        "resolvedStimulusPath": case["resolvedInput"]["resolvedPath"],
+        "referenceCapturePath": case["expectedArtifacts"]["referenceCapturePath"],
+        "casePlanPath": case["expectedArtifacts"]["casePlanPath"],
+        "referenceDirectory": case["expectedArtifacts"]["referenceDirectory"],
+        "referenceWetPath": case["expectedArtifacts"]["referenceWetPath"],
+        "referenceMetricsPath": case["expectedArtifacts"]["referenceMetricsPath"],
+    }
+
+
+def determine_group_status(execution_mode: str, cases: list[dict]) -> str:
+    if not cases:
+        return "no_declared_cases"
+    counts = summarize_execution_statuses(cases)
+    if execution_mode == "planning":
+        return "planning_ready"
+    if counts["executed_failed"] > 0:
+        return "reference_capture_failed"
+    if counts["skipped"] > 0:
+        return "reference_capture_partial"
+    if counts["executed_success"] > 0:
+        return "reference_capture_executed"
+    return "planning_ready"
+
+
 def build_group_summary(
     group_name: str,
     summary_path: Path,
-    planned_cases: list[dict],
+    cases: list[dict],
     allowed_state_statuses: list[str],
+    execution_mode: str,
 ) -> dict:
-    if planned_cases:
-        status = "planning_ready"
+    execution_counts = summarize_execution_statuses(cases)
+    reference_state_usage = summarize_reference_state_usage(
+        cases, allowed_state_statuses
+    )
+
+    if not cases:
+        notes = [
+            "No declared cases were selected for this group in this run.",
+            "No plugin renders or reference captures were executed in this run.",
+        ]
+    elif execution_mode == "planning":
         notes = [
             "This group summary describes planned cases only.",
             "No plugin renders or reference captures were executed in this run.",
         ]
     else:
-        status = "no_declared_cases"
         notes = [
-            "No declared cases were selected for this group in this run.",
-            "No plugin renders or reference captures were executed in this run.",
+            "This group summary records reference capture attempts for the selected cases.",
+            "Case status values distinguish planned, executed_success, executed_failed, and skipped outcomes.",
         ]
-
-    reference_state_usage = summarize_reference_state_usage(
-        planned_cases, allowed_state_statuses
-    )
 
     return {
         "schemaVersion": 1,
         "group": group_name,
-        "status": status,
-        "scaffoldOnly": True,
-        "rendersExecuted": False,
+        "status": determine_group_status(execution_mode, cases),
+        "executionMode": execution_mode,
+        "scaffoldOnly": all(case["scaffoldOnly"] for case in cases) if cases else True,
+        "rendersExecuted": any(case["rendersExecuted"] for case in cases),
         "summaryPath": str(summary_path.as_posix()),
-        "caseCount": len(planned_cases),
-        "caseIds": [case["caseId"] for case in planned_cases],
+        "caseCount": len(cases),
+        "caseIds": [case["caseId"] for case in cases],
         "referenceStateIds": reference_state_usage["referenceStateIds"],
         "referenceStateStatusCounts": reference_state_usage[
             "referenceStateStatusCounts"
         ],
-        "cases": planned_cases,
+        "executionStatusCounts": execution_counts,
+        "cases": [compact_case_summary(case) for case in cases],
         "notes": notes,
     }
 
@@ -774,9 +1356,21 @@ def build_top_level_summaries(
     return summaries
 
 
+def determine_run_status(execution_mode: str, execution_counts: dict[str, int]) -> str:
+    if execution_mode == "planning":
+        return "planning_ready"
+    if execution_counts["executed_failed"] > 0:
+        return "reference_capture_failed"
+    if execution_counts["executed_success"] > 0 and execution_counts["skipped"] > 0:
+        return "reference_capture_partial"
+    if execution_counts["executed_success"] > 0:
+        return "reference_capture_executed"
+    return "planning_ready"
+
+
 def main() -> int:
     args = parse_args()
-    ensure_supported_mode(args.mode)
+    execution_mode = resolve_execution_mode(args)
 
     repo_root = Path(__file__).resolve().parent.parent
     manifest_path, manifest = load_manifest(repo_root, args.manifest)
@@ -808,38 +1402,51 @@ def main() -> int:
         reference_states_by_id,
     )
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    reference_plugin = resolve_reference_plugin(repo_root, args.reference_plugin)
+    harness = resolve_harness(repo_root, args.harness)
+    validate_execution_prerequisites(execution_mode, reference_plugin, harness)
+
+    timestamp = timestamp_slug()
     artifacts_root = (repo_root / args.artifacts_root).resolve()
     run_dir = artifacts_root / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    planned_cases_by_group = write_case_plans(
+    prepared_by_group, flat_cases = prepare_cases(
         run_dir,
         group_cases,
         manifest["baselineDefaults"],
         args.plugin_under_test,
-        args.reference_plugin,
+        reference_plugin,
+        harness,
+        execution_mode,
     )
+
+    write_case_artifacts(flat_cases)
+
+    all_success = True
+    if execution_mode == "execute_reference":
+        all_success = execute_reference_cases(flat_cases, repo_root, args.keep_going)
+
+    write_case_artifacts(flat_cases)
 
     empty_groups: list[str] = []
     group_summaries: dict[str, dict] = {}
-    all_planned_cases: list[dict] = []
+    all_cases: list[dict] = []
     for group_name in selected_groups:
         summary_file_name = manifest["groupSummaryFiles"][group_name]
         summary_path = run_dir / summary_file_name
-        planned_cases = planned_cases_by_group.get(group_name, [])
-        all_planned_cases.extend(planned_cases)
+        planned_cases = prepared_by_group.get(group_name, [])
+        all_cases.extend(planned_cases)
         group_summary = build_group_summary(
             group_name,
             summary_path,
             planned_cases,
             reference_state_manifest["allowedStatuses"],
+            execution_mode,
         )
         if group_summary["caseCount"] == 0:
             empty_groups.append(group_name)
-        with summary_path.open("w", encoding="utf-8") as handle:
-            json.dump(group_summary, handle, indent=2)
-            handle.write("\n")
+        write_json(summary_path, group_summary)
         group_summaries[group_name] = {
             "path": str(summary_path.as_posix()),
             "status": "generated",
@@ -847,19 +1454,51 @@ def main() -> int:
             "caseIds": group_summary["caseIds"],
             "referenceStateIds": group_summary["referenceStateIds"],
             "referenceStateStatusCounts": group_summary["referenceStateStatusCounts"],
+            "executionStatusCounts": group_summary["executionStatusCounts"],
         }
 
     top_level_summaries = build_top_level_summaries(run_dir, manifest, selected_groups)
     reference_state_usage = summarize_reference_state_usage(
-        all_planned_cases, reference_state_manifest["allowedStatuses"]
+        all_cases, reference_state_manifest["allowedStatuses"]
+    )
+    execution_counts = summarize_execution_statuses(all_cases)
+
+    summary_notes: list[str] = []
+    if execution_mode == "planning":
+        summary_notes.extend(
+            [
+                "This run planned declared cases and wrote orchestration artifacts only.",
+                "No plugin renders or reference captures were executed in this run.",
+            ]
+        )
+    else:
+        summary_notes.extend(
+            [
+                "This run attempted reference capture commands for the selected cases.",
+                "Only cases with successful harness execution and expected outputs are marked executed_success.",
+            ]
+        )
+        if execution_counts["executed_failed"] > 0:
+            summary_notes.append(
+                "At least one case failed during execution. Review per-case reference_capture.json files."
+            )
+        if execution_counts["skipped"] > 0:
+            summary_notes.append(
+                "At least one case was skipped because execution prerequisites were missing or a prior failure stopped the run."
+            )
+    summary_notes.append(
+        "Reference states may still be planned or pending_capture scaffolds rather than captured Blackhole targets."
     )
 
     summary = {
         "schemaVersion": 1,
-        "runMode": args.mode,
-        "status": "planning_ready",
-        "scaffoldOnly": True,
-        "rendersExecuted": False,
+        "runMode": execution_mode,
+        "executionMode": execution_mode,
+        "status": determine_run_status(execution_mode, execution_counts),
+        "scaffoldOnly": execution_mode == "planning",
+        "rendersExecuted": execution_counts["executed_success"]
+        + execution_counts["executed_failed"]
+        > 0,
         "timestamp": timestamp,
         "summaryPath": str((run_dir / "summary.json").as_posix()),
         "caseManifestPath": str(manifest_path.as_posix()),
@@ -875,6 +1514,8 @@ def main() -> int:
         "emptyGroups": empty_groups,
         "pluginUnderTest": args.plugin_under_test,
         "referencePlugin": args.reference_plugin,
+        "resolvedReferencePlugin": reference_plugin,
+        "resolvedHarness": harness,
         "declaredReferenceStateIds": declared_reference_state_ids,
         "referenceStateIdsUsed": reference_state_usage["referenceStateIds"],
         "referenceStateStatusCounts": reference_state_usage[
@@ -882,26 +1523,37 @@ def main() -> int:
         ],
         "referenceStatesUsed": reference_state_usage["referenceStates"],
         "unresolvedReferenceStateIds": [],
+        "totalCasesPlanned": len(all_cases),
+        "totalCasesExecuted": execution_counts["executed_success"]
+        + execution_counts["executed_failed"],
+        "totalCasesSucceeded": execution_counts["executed_success"],
+        "totalCasesFailed": execution_counts["executed_failed"],
+        "totalCasesSkipped": execution_counts["skipped"],
+        "planningOnlyCaseIds": [
+            case["caseId"] for case in all_cases if case["executionStatus"] == "planned"
+        ],
         "groupSummaries": group_summaries,
         "topLevelSummaries": top_level_summaries,
-        "notes": [
-            "This run planned declared cases and wrote orchestration artifacts only.",
-            "No plugin renders or reference captures were executed in this ticket.",
-            "Reference states may still be planned or pending_capture scaffolds rather than captured Blackhole targets.",
-        ],
+        "notes": summary_notes,
     }
 
     summary_path = run_dir / "summary.json"
-    with summary_path.open("w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
-        handle.write("\n")
+    write_json(summary_path, summary)
 
-    print(f"Created measurement planning run: {run_dir}")
+    print(f"Created measurement run: {run_dir}")
     print(f"Wrote summary: {summary_path}")
     print(
         "Discovered case IDs: "
         + (", ".join(discovered_case_ids) if discovered_case_ids else "(none)")
     )
+    if reference_plugin is not None:
+        print(f"Resolved reference plugin: {reference_plugin['resolvedPath']}")
+    else:
+        print("Resolved reference plugin: (not provided)")
+    if harness is not None:
+        print(f"Resolved harness: {harness['resolvedPath']}")
+    else:
+        print("Resolved harness: (not provided)")
     print(
         "Reference states used: "
         + (
@@ -910,8 +1562,16 @@ def main() -> int:
             else "(none)"
         )
     )
-    print("No renders were executed.")
-    return 0
+    if execution_mode == "planning":
+        print("No renders were executed.")
+    else:
+        print(
+            "Execution counts: "
+            f"success={execution_counts['executed_success']}, "
+            f"failed={execution_counts['executed_failed']}, "
+            f"skipped={execution_counts['skipped']}"
+        )
+    return 0 if all_success else 1
 
 
 if __name__ == "__main__":

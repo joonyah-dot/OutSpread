@@ -51,3 +51,14 @@ Each state file includes a `referenceLock` object with room for:
 - baseline block size
 
 Use null or empty values where exact capture information is not yet known. Do not invent fake version strings, fake hosts, or fake captured parameters.
+
+## Execution Use
+
+When the measurement runner plans or executes reference capture, each case resolves its `referenceStateId` through this directory and merges:
+
+- reusable state parameters from the reference-state file
+- any narrow case-local parameter overrides
+
+The runner then writes a harness-ready `reference_case.json` into the per-case artifact folder.
+
+Current state files may still be `planned` or `pending_capture`. Running execution against one of those states does not silently upgrade it to `captured`. The state file should only move to `captured` when a follow-up ticket records the exact Blackhole target values and the relevant reference-lock details honestly.
