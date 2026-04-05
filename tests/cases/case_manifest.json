@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "outspread.measurement_cases",
+  "description": "Baseline measurement workflow scaffold for OutSpread M1.",
+  "groups": [
+    {
+      "name": "smoke",
+      "directory": "tests/cases/smoke",
+      "purpose": "Basic render and lifecycle sanity checks."
+    },
+    {
+      "name": "attack",
+      "directory": "tests/cases/attack",
+      "purpose": "Attack, bloom, and early density behavior."
+    },
+    {
+      "name": "tail",
+      "directory": "tests/cases/tail",
+      "purpose": "Decay contour, density, and spectral evolution."
+    },
+    {
+      "name": "gravity",
+      "directory": "tests/cases/gravity",
+      "purpose": "Bipolar Gravity behavior and reverse-like response."
+    },
+    {
+      "name": "size",
+      "directory": "tests/cases/size",
+      "purpose": "Space scaling and size-related interaction behavior."
+    },
+    {
+      "name": "tone_eq",
+      "directory": "tests/cases/tone_eq",
+      "purpose": "Low tone, high tone, and resonance behavior."
+    },
+    {
+      "name": "modulation",
+      "directory": "tests/cases/modulation",
+      "purpose": "Modulation rate, depth, and movement behavior."
+    },
+    {
+      "name": "width",
+      "directory": "tests/cases/width",
+      "purpose": "Stereo spread, decorrelation, and center stability."
+    },
+    {
+      "name": "freeze_infinite",
+      "directory": "tests/cases/freeze_infinite",
+      "purpose": "Freeze and Infinite behavior, stability, and transitions."
+    },
+    {
+      "name": "predelay",
+      "directory": "tests/cases/predelay",
+      "purpose": "Predelay timing and bloom interaction."
+    },
+    {
+      "name": "sample_rate_block_size",
+      "directory": "tests/cases/sample_rate_block_size",
+      "purpose": "Behavior consistency across supported execution settings."
+    },
+    {
+      "name": "cpu_latency",
+      "directory": "tests/cases/cpu_latency",
+      "purpose": "CPU cost, latency reporting, and multi-instance practicality."
+    }
+  ],
+  "baselineDefaults": {
+    "sampleRate": 48000,
+    "blockSize": 256,
+    "channels": 2,
+    "warmupMs": 50,
+    "renderSeconds": 2.0
+  },
+  "caseFields": {
+    "required": [
+      "id",
+      "group",
+      "input"
+    ],
+    "preferred": [
+      "paramsByName"
+    ],
+    "runnerSuppliedOrDefaulted": [
+      "plugin",
+      "sampleRate",
+      "blockSize",
+      "channels",
+      "warmupMs",
+      "renderSeconds"
+    ],
+    "optional": [
+      "notes",
+      "referenceStateId",
+      "expectedDeterminism",
+      "analysisProfile",
+      "expectedOutputs",
+      "paramsByIndex"
+    ]
+  },
+  "parameterAssignment": {
+    "preferredField": "paramsByName",
+    "optionalCompatibilityField": "paramsByIndex",
+    "rule": "Use paramsByName by default. Use paramsByIndex only when harness compatibility requires it. Do not duplicate equivalent assignments in both fields."
+  },
+  "expectedTopLevelSummaryFiles": [
+    "attack_summary.json",
+    "tail_summary.json",
+    "gravity_summary.json",
+    "width_summary.json",
+    "modulation_summary.json",
+    "freeze_summary.json",
+    "predelay_summary.json",
+    "sample_rate_summary.json",
+    "cpu_latency_summary.json",
+    "summary.json"
+  ]
+}
