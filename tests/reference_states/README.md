@@ -62,3 +62,5 @@ When the measurement runner plans or executes reference capture, each case resol
 The runner then writes a harness-ready `reference_case.json` into the per-case artifact folder.
 
 Current state files may still be `planned` or `pending_capture`. Running execution against one of those states does not silently upgrade it to `captured`. The state file should only move to `captured` when a follow-up ticket records the exact Blackhole target values and the relevant reference-lock details honestly.
+
+If a capture attempt is blocked because the installed plugin format does not match the current harness workflow, the linked state files stay `pending_capture`. Blocked execution artifacts should explain the limitation rather than promoting the state.

@@ -118,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--reference-plugin",
-        help="Path to the reference VST3 plugin bundle to plan or execute against.",
+        help="Path to the reference plugin bundle or file to plan or execute against.",
     )
     parser.add_argument(
         "--harness",
@@ -178,6 +178,38 @@ def load_manifest(repo_root: Path, manifest_arg: str) -> tuple[Path, dict]:
 
     if "expectedTopLevelSummaryFiles" not in manifest:
         manifest["expectedTopLevelSummaryFiles"] = ["summary.json"]
+
+    manifest.setdefault(
+        "referenceCaptureWorkflow",
+        {
+            "tool": "vst3_harness",
+            "supportedPluginFormats": ["vst3"],
+            "notes": [
+                "The current reference-capture workflow is built around vst3_harness.",
+                "The current workflow only supports VST3 reference plugins.",
+            ],
+        },
+    )
+    workflow = manifest["referenceCaptureWorkflow"]
+    if not isinstance(workflow, dict):
+        raise SystemExit("error: manifest field 'referenceCaptureWorkflow' must be an object.")
+    if not isinstance(workflow.get("tool"), str) or not workflow["tool"].strip():
+        raise SystemExit(
+            "error: manifest field 'referenceCaptureWorkflow.tool' must be a non-empty string."
+        )
+    supported_formats = workflow.get("supportedPluginFormats")
+    if (
+        not isinstance(supported_formats, list)
+        or not supported_formats
+        or any(not isinstance(item, str) or not item for item in supported_formats)
+    ):
+        raise SystemExit(
+            "error: manifest field 'referenceCaptureWorkflow.supportedPluginFormats' must be a non-empty list of strings."
+        )
+    workflow["notes"] = normalize_notes(
+        workflow.get("notes"),
+        "manifest field 'referenceCaptureWorkflow.notes'",
+    )
 
     return manifest_path, manifest
 
@@ -655,26 +687,66 @@ def resolve_cli_path(repo_root: Path, raw_path: str) -> Path:
     )
 
 
-def resolve_reference_plugin(repo_root: Path, raw_path: str | None) -> dict | None:
+def detect_reference_plugin_format(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".vst3":
+        return "vst3"
+    if suffix == ".dll":
+        return "vst2"
+    return "unknown"
+
+
+def describe_plugin_format(plugin_format: str) -> str:
+    mapping = {
+        "vst3": "VST3 (.vst3)",
+        "vst2": "VST2 (.dll)",
+        "unknown": "unknown plugin format",
+    }
+    return mapping.get(plugin_format, plugin_format)
+
+
+def resolve_reference_plugin(
+    repo_root: Path, raw_path: str | None, reference_workflow: dict
+) -> dict | None:
     if raw_path is None:
         return None
     path = resolve_cli_path(repo_root, raw_path)
     if not path.exists():
         raise SystemExit(f"error: reference plugin path does not exist: {path}")
-    if path.suffix.lower() != ".vst3":
+    plugin_format = detect_reference_plugin_format(path)
+    if plugin_format == "unknown":
         raise SystemExit(
-            f"error: reference plugin path must point to a .vst3 bundle or file: {path}"
+            "error: reference plugin path must point to a supported plugin file or bundle "
+            f"such as .vst3 or .dll: {path}"
         )
     if not (path.is_dir() or path.is_file()):
         raise SystemExit(
             f"error: reference plugin path is not a usable file or directory: {path}"
+        )
+    supported_formats = list(reference_workflow["supportedPluginFormats"])
+    format_supported = plugin_format in supported_formats
+    compatibility_reason = None
+    compatibility_code = None
+    if not format_supported:
+        compatibility_code = "unsupported_reference_plugin_format"
+        compatibility_reason = (
+            f"Current reference-capture workflow '{reference_workflow['tool']}' only supports "
+            f"{', '.join(supported_formats)} reference plugins, but the provided plugin is "
+            f"{describe_plugin_format(plugin_format)} at {path}."
         )
     return {
         "input": raw_path,
         "resolvedPath": str(path.as_posix()),
         "name": path.name,
         "pathType": "directory" if path.is_dir() else "file",
-        "format": "vst3",
+        "format": plugin_format,
+        "workflowCompatibility": {
+            "workflowTool": reference_workflow["tool"],
+            "supportedPluginFormats": supported_formats,
+            "supported": format_supported,
+            "reasonCode": compatibility_code,
+            "reason": compatibility_reason,
+        },
     }
 
 
@@ -705,7 +777,7 @@ def validate_execution_prerequisites(
         return
     if reference_plugin is None:
         raise SystemExit(
-            "error: --execute-reference requires --reference-plugin with a valid .vst3 path."
+            "error: --execute-reference requires --reference-plugin with a valid plugin path."
         )
     if harness is None:
         raise SystemExit(
@@ -817,7 +889,7 @@ def command_entry(
     stdout_path: str,
     stderr_path: str,
     expected_output_paths: list[str],
-    missing_prerequisites: list[str],
+    blocking_issues: list[dict],
 ) -> dict:
     argv = [executable if executable is not None else "<missing_executable>"] + args
     return {
@@ -826,8 +898,8 @@ def command_entry(
         "stdoutPath": stdout_path,
         "stderrPath": stderr_path,
         "expectedOutputPaths": expected_output_paths,
-        "runnable": not missing_prerequisites,
-        "missingPrerequisites": missing_prerequisites,
+        "runnable": not blocking_issues,
+        "blockingIssues": blocking_issues,
     }
 
 
@@ -837,13 +909,35 @@ def build_reference_render_plan(
     settings: dict,
     reference_plugin: dict | None,
     harness: dict | None,
+    reference_workflow: dict,
+    execution_mode: str,
     expected_artifacts: dict,
 ) -> dict:
-    missing_prerequisites: list[str] = []
-    if harness is None:
-        missing_prerequisites.append("harness")
-    if reference_plugin is None:
-        missing_prerequisites.append("reference_plugin")
+    blocking_issues: list[dict] = []
+    if execution_mode == "execute_reference" and harness is None:
+        blocking_issues.append(
+            {
+                "code": "missing_harness",
+                "message": "Reference execution requires --harness with a valid harness executable path.",
+            }
+        )
+    if execution_mode == "execute_reference" and reference_plugin is None:
+        blocking_issues.append(
+            {
+                "code": "missing_reference_plugin",
+                "message": "Reference execution requires --reference-plugin with a valid plugin path.",
+            }
+        )
+    elif (
+        reference_plugin is not None
+        and not reference_plugin["workflowCompatibility"]["supported"]
+    ):
+        blocking_issues.append(
+            {
+                "code": reference_plugin["workflowCompatibility"]["reasonCode"],
+                "message": reference_plugin["workflowCompatibility"]["reason"],
+            }
+        )
 
     harness_path = harness["resolvedPath"] if harness else None
     plugin_path = reference_plugin["resolvedPath"] if reference_plugin else None
@@ -885,7 +979,7 @@ def build_reference_render_plan(
             stdout_path=expected_artifacts["renderStdoutPath"],
             stderr_path=expected_artifacts["renderStderrPath"],
             expected_output_paths=[expected_artifacts["referenceWetPath"]],
-            missing_prerequisites=missing_prerequisites,
+            blocking_issues=blocking_issues,
         ),
         command_entry(
             name="analyze",
@@ -894,17 +988,20 @@ def build_reference_render_plan(
             stdout_path=expected_artifacts["analyzeStdoutPath"],
             stderr_path=expected_artifacts["analyzeStderrPath"],
             expected_output_paths=[expected_artifacts["referenceMetricsPath"]],
-            missing_prerequisites=missing_prerequisites,
+            blocking_issues=blocking_issues,
         ),
     ]
 
     return {
-        "runner": "vst3_harness",
+        "runner": reference_workflow["tool"],
+        "workflowNotes": reference_workflow.get("notes", []),
         "referenceCaseId": case_id,
         "referencePluginPath": plugin_path,
+        "referencePluginFormat": reference_plugin["format"] if reference_plugin else None,
         "harnessPath": harness_path,
-        "runnable": not missing_prerequisites,
-        "missingPrerequisites": missing_prerequisites,
+        "runnable": not blocking_issues,
+        "captureReadiness": "ready" if not blocking_issues else "blocked",
+        "blockingIssues": blocking_issues,
         "commands": commands,
     }
 
@@ -917,6 +1014,7 @@ def build_case_record(
     plugin_under_test: str | None,
     reference_plugin: dict | None,
     harness: dict | None,
+    reference_workflow: dict,
     execution_mode: str,
 ) -> dict:
     case_data = case_record["caseData"]
@@ -938,6 +1036,8 @@ def build_case_record(
         settings,
         reference_plugin,
         harness,
+        reference_workflow,
+        execution_mode,
         expected_artifacts,
     )
 
@@ -968,6 +1068,7 @@ def build_case_record(
         "resolvedHarness": harness,
         "expectedArtifacts": expected_artifacts,
         "referenceRenderPlan": reference_render_plan,
+        "captureReadiness": reference_render_plan["captureReadiness"],
         "executionMode": execution_mode,
         "executionStatus": "planned",
         "rendersExecuted": False,
@@ -990,6 +1091,7 @@ def prepare_cases(
     plugin_under_test: str | None,
     reference_plugin: dict | None,
     harness: dict | None,
+    reference_workflow: dict,
     execution_mode: str,
 ) -> tuple[dict[str, list[dict]], list[dict]]:
     prepared_by_group: dict[str, list[dict]] = {}
@@ -1005,6 +1107,7 @@ def prepare_cases(
                 plugin_under_test,
                 reference_plugin,
                 harness,
+                reference_workflow,
                 execution_mode,
             )
             prepared_by_group[group_name].append(prepared)
@@ -1031,6 +1134,7 @@ def build_case_plan_payload(case: dict) -> dict:
         "resolvedHarness": case["resolvedHarness"],
         "expectedArtifacts": case["expectedArtifacts"],
         "referenceRenderPlan": case["referenceRenderPlan"],
+        "captureReadiness": case["captureReadiness"],
         "executionMode": case["executionMode"],
         "executionStatus": case["executionStatus"],
         "rendersExecuted": case["rendersExecuted"],
@@ -1057,6 +1161,7 @@ def build_reference_capture_payload(case: dict) -> dict:
         "resolvedReferencePlugin": case["resolvedReferencePlugin"],
         "resolvedHarness": case["resolvedHarness"],
         "referenceRenderPlan": case["referenceRenderPlan"],
+        "captureReadiness": case["captureReadiness"],
         "expectedArtifacts": case["expectedArtifacts"],
         "executionResult": case["executionResult"],
         "notes": case["notes"],
@@ -1179,11 +1284,11 @@ def execute_reference_cases(
 
         render_plan = case["referenceRenderPlan"]
         if not render_plan["runnable"]:
-            missing = ", ".join(render_plan["missingPrerequisites"])
             case["executionStatus"] = "skipped"
             case["executionResult"]["attempted"] = False
-            case["executionResult"]["failureReason"] = (
-                "execution prerequisites missing: " + missing
+            case["executionResult"]["startedAt"] = None
+            case["executionResult"]["failureReason"] = "; ".join(
+                issue["message"] for issue in render_plan["blockingIssues"]
             )
             case["executionResult"]["finishedAt"] = iso_now()
             all_success = False
@@ -1249,19 +1354,35 @@ def summarize_execution_statuses(cases: list[dict]) -> dict[str, int]:
     }
 
 
+def collect_blocking_issues(cases: list[dict]) -> list[dict]:
+    unique: dict[tuple[str, str], dict] = {}
+    for case in cases:
+        for issue in case["referenceRenderPlan"]["blockingIssues"]:
+            key = (issue["code"], issue["message"])
+            unique[key] = issue
+    return [unique[key] for key in sorted(unique)]
+
+
 def compact_case_summary(case: dict) -> dict:
     return {
         "caseId": case["caseId"],
         "executionStatus": case["executionStatus"],
         "rendersExecuted": case["rendersExecuted"],
+        "captureReadiness": case["captureReadiness"],
         "referenceStateId": case["referenceStateId"],
         "referenceStateStatus": case["referenceStateStatus"],
+        "referencePluginFormat": (
+            case["resolvedReferencePlugin"]["format"]
+            if case["resolvedReferencePlugin"] is not None
+            else None
+        ),
         "resolvedStimulusPath": case["resolvedInput"]["resolvedPath"],
         "referenceCapturePath": case["expectedArtifacts"]["referenceCapturePath"],
         "casePlanPath": case["expectedArtifacts"]["casePlanPath"],
         "referenceDirectory": case["expectedArtifacts"]["referenceDirectory"],
         "referenceWetPath": case["expectedArtifacts"]["referenceWetPath"],
         "referenceMetricsPath": case["expectedArtifacts"]["referenceMetricsPath"],
+        "blockingIssues": case["referenceRenderPlan"]["blockingIssues"],
     }
 
 
@@ -1269,10 +1390,13 @@ def determine_group_status(execution_mode: str, cases: list[dict]) -> str:
     if not cases:
         return "no_declared_cases"
     counts = summarize_execution_statuses(cases)
+    has_blocking_issues = bool(collect_blocking_issues(cases))
     if execution_mode == "planning":
-        return "planning_ready"
+        return "planning_blocked" if has_blocking_issues else "planning_ready"
     if counts["executed_failed"] > 0:
         return "reference_capture_failed"
+    if counts["executed_success"] == 0 and counts["skipped"] > 0:
+        return "reference_capture_blocked"
     if counts["skipped"] > 0:
         return "reference_capture_partial"
     if counts["executed_success"] > 0:
@@ -1291,6 +1415,7 @@ def build_group_summary(
     reference_state_usage = summarize_reference_state_usage(
         cases, allowed_state_statuses
     )
+    blocking_issues = collect_blocking_issues(cases)
 
     if not cases:
         notes = [
@@ -1298,15 +1423,22 @@ def build_group_summary(
             "No plugin renders or reference captures were executed in this run.",
         ]
     elif execution_mode == "planning":
-        notes = [
-            "This group summary describes planned cases only.",
-            "No plugin renders or reference captures were executed in this run.",
-        ]
+        notes = ["This group summary describes planned cases only."]
+        if blocking_issues:
+            notes.append(
+                "At least one selected case is blocked from reference capture by current plugin-format or harness constraints."
+            )
+        else:
+            notes.append("No plugin renders or reference captures were executed in this run.")
     else:
         notes = [
             "This group summary records reference capture attempts for the selected cases.",
             "Case status values distinguish planned, executed_success, executed_failed, and skipped outcomes.",
         ]
+        if blocking_issues:
+            notes.append(
+                "At least one selected case was blocked before execution and remains uncaptured."
+            )
 
     return {
         "schemaVersion": 1,
@@ -1323,6 +1455,7 @@ def build_group_summary(
             "referenceStateStatusCounts"
         ],
         "executionStatusCounts": execution_counts,
+        "blockingIssues": blocking_issues,
         "cases": [compact_case_summary(case) for case in cases],
         "notes": notes,
     }
@@ -1356,11 +1489,15 @@ def build_top_level_summaries(
     return summaries
 
 
-def determine_run_status(execution_mode: str, execution_counts: dict[str, int]) -> str:
+def determine_run_status(
+    execution_mode: str, execution_counts: dict[str, int], has_blocking_issues: bool
+) -> str:
     if execution_mode == "planning":
-        return "planning_ready"
+        return "planning_blocked" if has_blocking_issues else "planning_ready"
     if execution_counts["executed_failed"] > 0:
         return "reference_capture_failed"
+    if execution_counts["executed_success"] == 0 and execution_counts["skipped"] > 0:
+        return "reference_capture_blocked"
     if execution_counts["executed_success"] > 0 and execution_counts["skipped"] > 0:
         return "reference_capture_partial"
     if execution_counts["executed_success"] > 0:
@@ -1374,6 +1511,7 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parent.parent
     manifest_path, manifest = load_manifest(repo_root, args.manifest)
+    reference_workflow = manifest["referenceCaptureWorkflow"]
     selected_groups = normalize_groups(manifest, args)
     requested_case_ids = parse_multi_csv_args(args.case_id)
 
@@ -1402,7 +1540,9 @@ def main() -> int:
         reference_states_by_id,
     )
 
-    reference_plugin = resolve_reference_plugin(repo_root, args.reference_plugin)
+    reference_plugin = resolve_reference_plugin(
+        repo_root, args.reference_plugin, reference_workflow
+    )
     harness = resolve_harness(repo_root, args.harness)
     validate_execution_prerequisites(execution_mode, reference_plugin, harness)
 
@@ -1418,6 +1558,7 @@ def main() -> int:
         args.plugin_under_test,
         reference_plugin,
         harness,
+        reference_workflow,
         execution_mode,
     )
 
@@ -1462,15 +1603,27 @@ def main() -> int:
         all_cases, reference_state_manifest["allowedStatuses"]
     )
     execution_counts = summarize_execution_statuses(all_cases)
+    blocking_issues = collect_blocking_issues(all_cases)
+    promoted_state_ids: list[str] = []
+    pending_state_ids = [
+        state["id"]
+        for state in reference_state_usage["referenceStates"]
+        if state["status"] != "captured"
+    ]
 
     summary_notes: list[str] = []
     if execution_mode == "planning":
-        summary_notes.extend(
-            [
-                "This run planned declared cases and wrote orchestration artifacts only.",
-                "No plugin renders or reference captures were executed in this run.",
-            ]
+        summary_notes.append(
+            "This run planned declared cases and wrote orchestration artifacts only."
         )
+        if blocking_issues:
+            summary_notes.append(
+                "At least one selected case is blocked from real reference capture by current workflow compatibility constraints."
+            )
+        else:
+            summary_notes.append(
+                "No plugin renders or reference captures were executed in this run."
+            )
     else:
         summary_notes.extend(
             [
@@ -1481,10 +1634,14 @@ def main() -> int:
         if execution_counts["executed_failed"] > 0:
             summary_notes.append(
                 "At least one case failed during execution. Review per-case reference_capture.json files."
-            )
+        )
         if execution_counts["skipped"] > 0:
             summary_notes.append(
                 "At least one case was skipped because execution prerequisites were missing or a prior failure stopped the run."
+            )
+        if blocking_issues:
+            summary_notes.append(
+                "At least one selected case was blocked by current plugin-format or harness compatibility constraints."
             )
     summary_notes.append(
         "Reference states may still be planned or pending_capture scaffolds rather than captured Blackhole targets."
@@ -1494,7 +1651,9 @@ def main() -> int:
         "schemaVersion": 1,
         "runMode": execution_mode,
         "executionMode": execution_mode,
-        "status": determine_run_status(execution_mode, execution_counts),
+        "status": determine_run_status(
+            execution_mode, execution_counts, bool(blocking_issues)
+        ),
         "scaffoldOnly": execution_mode == "planning",
         "rendersExecuted": execution_counts["executed_success"]
         + execution_counts["executed_failed"]
@@ -1516,19 +1675,35 @@ def main() -> int:
         "referencePlugin": args.reference_plugin,
         "resolvedReferencePlugin": reference_plugin,
         "resolvedHarness": harness,
+        "referenceCaptureWorkflow": reference_workflow,
         "declaredReferenceStateIds": declared_reference_state_ids,
         "referenceStateIdsUsed": reference_state_usage["referenceStateIds"],
         "referenceStateStatusCounts": reference_state_usage[
             "referenceStateStatusCounts"
         ],
         "referenceStatesUsed": reference_state_usage["referenceStates"],
+        "referenceStateIdsPromotedToCaptured": promoted_state_ids,
+        "referenceStateIdsStillPendingCapture": pending_state_ids,
         "unresolvedReferenceStateIds": [],
+        "captureBlockedReasons": [issue["message"] for issue in blocking_issues],
         "totalCasesPlanned": len(all_cases),
         "totalCasesExecuted": execution_counts["executed_success"]
         + execution_counts["executed_failed"],
         "totalCasesSucceeded": execution_counts["executed_success"],
         "totalCasesFailed": execution_counts["executed_failed"],
         "totalCasesSkipped": execution_counts["skipped"],
+        "attemptedCaseIds": [
+            case["caseId"] for case in all_cases if case["executionResult"]["attempted"]
+        ],
+        "succeededCaseIds": [
+            case["caseId"] for case in all_cases if case["executionStatus"] == "executed_success"
+        ],
+        "failedCaseIds": [
+            case["caseId"] for case in all_cases if case["executionStatus"] == "executed_failed"
+        ],
+        "skippedCaseIds": [
+            case["caseId"] for case in all_cases if case["executionStatus"] == "skipped"
+        ],
         "planningOnlyCaseIds": [
             case["caseId"] for case in all_cases if case["executionStatus"] == "planned"
         ],

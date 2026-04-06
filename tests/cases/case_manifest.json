@@ -4,6 +4,17 @@
   "description": "Baseline manifest-driven measurement workflow scaffold for OutSpread M1.",
   "stimuliManifestPath": "tests/_generated/stimuli/stimuli_manifest.json",
   "referenceStateManifestPath": "tests/reference_states/reference_state_manifest.json",
+  "referenceCaptureWorkflow": {
+    "tool": "vst3_harness",
+    "supportedPluginFormats": [
+      "vst3"
+    ],
+    "notes": [
+      "The current reference-capture workflow is built around vst3_harness.",
+      "The current workflow only supports VST3 reference plugins.",
+      "Installed VST2 .dll plugins such as Eventide Blackhole.dll are not capturable through this workflow yet."
+    ]
+  },
   "groups": [
     {
       "name": "smoke",

@@ -98,12 +98,14 @@ Reference execution is explicit:
 py -3 scripts\run_measurements.py --groups smoke,attack --reference-plugin "C:\Path\To\Blackhole.vst3" --harness "C:\Path\To\vst3_harness.exe" --execute-reference
 ```
 
+The current repo capture workflow is `vst3_harness`, and it currently supports VST3 reference plugins only. A VST2 `.dll` path can still be checked and surfaced in planning artifacts, but it remains blocked for real capture and leaves the linked reference states in `pending_capture`.
+
 Execution mode requires:
 
-- a valid `--reference-plugin` path that points to a `.vst3`
+- a valid `--reference-plugin` path
 - a valid `--harness` path for the current render workflow
 
-If those prerequisites are missing or invalid, the runner fails clearly instead of pretending capture happened.
+If those prerequisites are missing or invalid, or if the provided plugin format is unsupported by the current workflow, the runner fails clearly or records a blocked capture state instead of pretending capture happened.
 
 ## Per-Case Artifacts
 
@@ -117,6 +119,8 @@ For each resolved case, the runner writes:
 In planning mode, these files describe the planned command sequence and expected output paths only.
 
 In execution mode, `reference_capture.json` records the command arguments, stdout/stderr paths, exit status, and whether expected outputs such as `wet.wav` and `metrics.json` were actually produced.
+
+If capture is blocked, the per-case artifacts record the blocking reason explicitly and the case remains uncaptured.
 
 ## Adding Cases
 
