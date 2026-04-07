@@ -121,6 +121,14 @@ def parse_args() -> argparse.Namespace:
         help="Path to the reference plugin bundle or file to plan or execute against.",
     )
     parser.add_argument(
+        "--reference-search-root",
+        action="append",
+        help=(
+            "Optional root directory to search recursively for candidate reference "
+            "plugins such as Blackhole. May be repeated or provided as comma-separated values."
+        ),
+    )
+    parser.add_argument(
         "--harness",
         help="Path to the render harness executable, such as vst3_harness.exe.",
     )
@@ -705,6 +713,44 @@ def describe_plugin_format(plugin_format: str) -> str:
     return mapping.get(plugin_format, plugin_format)
 
 
+def build_reference_plugin_record(
+    path: Path,
+    reference_workflow: dict,
+    source: str,
+    raw_input: str | None = None,
+    search_root: str | None = None,
+) -> dict:
+    plugin_format = detect_reference_plugin_format(path)
+    supported_formats = list(reference_workflow["supportedPluginFormats"])
+    format_supported = plugin_format in supported_formats
+    compatibility_reason = None
+    compatibility_code = None
+    if not format_supported:
+        compatibility_code = "unsupported_reference_plugin_format"
+        compatibility_reason = (
+            f"Current reference-capture workflow '{reference_workflow['tool']}' only supports "
+            f"{', '.join(supported_formats)} reference plugins, but the provided plugin is "
+            f"{describe_plugin_format(plugin_format)} at {path}."
+        )
+    return {
+        "input": raw_input,
+        "source": source,
+        "searchRoot": search_root,
+        "resolvedPath": str(path.as_posix()),
+        "name": path.name,
+        "pathType": "directory" if path.is_dir() else "file",
+        "format": plugin_format,
+        "formatDisplay": describe_plugin_format(plugin_format),
+        "workflowCompatibility": {
+            "workflowTool": reference_workflow["tool"],
+            "supportedPluginFormats": supported_formats,
+            "supported": format_supported,
+            "reasonCode": compatibility_code,
+            "reason": compatibility_reason,
+        },
+    }
+
+
 def resolve_reference_plugin(
     repo_root: Path, raw_path: str | None, reference_workflow: dict
 ) -> dict | None:
@@ -723,31 +769,189 @@ def resolve_reference_plugin(
         raise SystemExit(
             f"error: reference plugin path is not a usable file or directory: {path}"
         )
-    supported_formats = list(reference_workflow["supportedPluginFormats"])
-    format_supported = plugin_format in supported_formats
-    compatibility_reason = None
-    compatibility_code = None
-    if not format_supported:
-        compatibility_code = "unsupported_reference_plugin_format"
-        compatibility_reason = (
-            f"Current reference-capture workflow '{reference_workflow['tool']}' only supports "
-            f"{', '.join(supported_formats)} reference plugins, but the provided plugin is "
-            f"{describe_plugin_format(plugin_format)} at {path}."
+    return build_reference_plugin_record(
+        path=path,
+        reference_workflow=reference_workflow,
+        source="explicit_path",
+        raw_input=raw_path,
+    )
+
+
+def normalize_reference_search_roots(
+    repo_root: Path, raw_values: list[str] | None
+) -> list[dict]:
+    raw_roots = parse_multi_csv_args(raw_values)
+    normalized_roots: list[dict] = []
+    seen_paths: set[str] = set()
+    for raw_root in raw_roots:
+        root_path = resolve_cli_path(repo_root, raw_root)
+        if not root_path.exists():
+            raise SystemExit(f"error: reference search root does not exist: {root_path}")
+        if not root_path.is_dir():
+            raise SystemExit(
+                f"error: reference search root must point to a directory: {root_path}"
+            )
+        try:
+            next(root_path.iterdir(), None)
+        except OSError as exc:
+            raise SystemExit(
+                f"error: reference search root is not readable: {root_path}: {exc}"
+            ) from exc
+
+        resolved_path = str(root_path.as_posix())
+        if resolved_path in seen_paths:
+            continue
+        seen_paths.add(resolved_path)
+        normalized_roots.append(
+            {
+                "input": raw_root,
+                "resolvedPath": resolved_path,
+            }
         )
-    return {
-        "input": raw_path,
-        "resolvedPath": str(path.as_posix()),
-        "name": path.name,
-        "pathType": "directory" if path.is_dir() else "file",
-        "format": plugin_format,
-        "workflowCompatibility": {
-            "workflowTool": reference_workflow["tool"],
-            "supportedPluginFormats": supported_formats,
-            "supported": format_supported,
-            "reasonCode": compatibility_code,
-            "reason": compatibility_reason,
-        },
+    return normalized_roots
+
+
+def is_blackhole_candidate_name(name: str) -> bool:
+    return "blackhole" in name.lower()
+
+
+def discover_reference_plugin_candidates(
+    search_roots: list[dict], reference_workflow: dict
+) -> list[dict]:
+    candidates_by_path: dict[str, dict] = {}
+    for search_root in search_roots:
+        root_path = Path(search_root["resolvedPath"])
+        try:
+            for candidate_path in root_path.rglob("*"):
+                if not (candidate_path.is_file() or candidate_path.is_dir()):
+                    continue
+                if not is_blackhole_candidate_name(candidate_path.name):
+                    continue
+                plugin_format = detect_reference_plugin_format(candidate_path)
+                if plugin_format == "unknown":
+                    continue
+                resolved_path = str(candidate_path.resolve().as_posix())
+                candidates_by_path[resolved_path] = build_reference_plugin_record(
+                    path=candidate_path.resolve(),
+                    reference_workflow=reference_workflow,
+                    source="search_root",
+                    search_root=search_root["resolvedPath"],
+                )
+        except OSError as exc:
+            raise SystemExit(
+                f"error: failed while searching reference plugins under {root_path}: {exc}"
+            ) from exc
+
+    return [
+        candidates_by_path[path]
+        for path in sorted(candidates_by_path, key=lambda item: item.lower())
+    ]
+
+
+def reference_candidate_sort_key(candidate: dict) -> tuple[int, int, str]:
+    format_priority = {
+        "vst3": 0,
+        "vst2": 1,
+        "unknown": 2,
     }
+    compatibility_rank = 0 if candidate["workflowCompatibility"]["supported"] else 1
+    return (
+        compatibility_rank,
+        format_priority.get(candidate["format"], 9),
+        candidate["resolvedPath"].lower(),
+    )
+
+
+def select_reference_candidate(candidates: list[dict]) -> tuple[dict, str]:
+    ordered_candidates = sorted(candidates, key=reference_candidate_sort_key)
+    selected = ordered_candidates[0]
+
+    compatible_candidates = [
+        candidate
+        for candidate in ordered_candidates
+        if candidate["workflowCompatibility"]["supported"]
+    ]
+    if len(ordered_candidates) == 1:
+        return selected, "Selected the only discovered Blackhole candidate."
+    if compatible_candidates:
+        return (
+            selected,
+            "Selected the first workflow-compatible candidate after sorting by "
+            "plugin format priority and resolved path.",
+        )
+    return (
+        selected,
+        "No workflow-compatible candidate was found. Selected the first discovered "
+        "candidate after sorting by plugin format priority and resolved path so the "
+        "blocked capture state is deterministic and reviewable.",
+    )
+
+
+def resolve_reference_plugin_selection(
+    repo_root: Path,
+    explicit_path: str | None,
+    raw_search_roots: list[str] | None,
+    reference_workflow: dict,
+) -> tuple[dict | None, dict]:
+    normalized_search_roots = normalize_reference_search_roots(
+        repo_root, raw_search_roots
+    )
+    selection = {
+        "requestedPath": explicit_path,
+        "searchRoots": normalized_search_roots,
+        "searchRequested": bool(normalized_search_roots),
+        "discoveredCandidates": [],
+        "selectedCandidate": None,
+        "selectionSource": None,
+        "selectionReason": None,
+        "resolutionStatus": "not_requested",
+        "blockingCode": None,
+        "blockingReason": None,
+        "explicitPathOverridesSearch": bool(explicit_path and normalized_search_roots),
+    }
+
+    if explicit_path is not None:
+        selected = resolve_reference_plugin(repo_root, explicit_path, reference_workflow)
+        selection["selectedCandidate"] = selected
+        selection["selectionSource"] = "explicit_path"
+        selection["selectionReason"] = (
+            "Selected the explicit --reference-plugin path."
+            if not normalized_search_roots
+            else "Selected the explicit --reference-plugin path. Search roots were ignored because explicit paths take precedence."
+        )
+        selection["resolutionStatus"] = "explicit_path_selected"
+        if not selected["workflowCompatibility"]["supported"]:
+            selection["blockingCode"] = selected["workflowCompatibility"]["reasonCode"]
+            selection["blockingReason"] = selected["workflowCompatibility"]["reason"]
+        return selected, selection
+
+    if normalized_search_roots:
+        discovered_candidates = discover_reference_plugin_candidates(
+            normalized_search_roots, reference_workflow
+        )
+        selection["discoveredCandidates"] = discovered_candidates
+        selection["selectionSource"] = "search_root"
+        if not discovered_candidates:
+            selection["resolutionStatus"] = "search_no_candidates_found"
+            selection["blockingCode"] = "no_reference_plugin_candidates_found"
+            selection["blockingReason"] = (
+                "No Blackhole plugin candidates were found under the requested search root(s): "
+                + ", ".join(root["resolvedPath"] for root in normalized_search_roots)
+            )
+            return None, selection
+
+        selected, selection_reason = select_reference_candidate(discovered_candidates)
+        selection["selectedCandidate"] = selected
+        selection["selectionReason"] = selection_reason
+        if selected["workflowCompatibility"]["supported"]:
+            selection["resolutionStatus"] = "search_selected_compatible"
+        else:
+            selection["resolutionStatus"] = "search_selected_incompatible"
+            selection["blockingCode"] = selected["workflowCompatibility"]["reasonCode"]
+            selection["blockingReason"] = selected["workflowCompatibility"]["reason"]
+        return selected, selection
+
+    return None, selection
 
 
 def resolve_harness(repo_root: Path, raw_path: str | None) -> dict | None:
@@ -771,13 +975,17 @@ def resolve_harness(repo_root: Path, raw_path: str | None) -> dict | None:
 def validate_execution_prerequisites(
     execution_mode: str,
     reference_plugin: dict | None,
+    reference_plugin_selection: dict,
     harness: dict | None,
 ) -> None:
     if execution_mode != "execute_reference":
         return
-    if reference_plugin is None:
+    if reference_plugin is None and not (
+        reference_plugin_selection["requestedPath"]
+        or reference_plugin_selection["searchRequested"]
+    ):
         raise SystemExit(
-            "error: --execute-reference requires --reference-plugin with a valid plugin path."
+            "error: --execute-reference requires --reference-plugin or --reference-search-root."
         )
     if harness is None:
         raise SystemExit(
@@ -908,6 +1116,7 @@ def build_reference_render_plan(
     resolved_input: dict,
     settings: dict,
     reference_plugin: dict | None,
+    reference_plugin_selection: dict,
     harness: dict | None,
     reference_workflow: dict,
     execution_mode: str,
@@ -921,11 +1130,18 @@ def build_reference_render_plan(
                 "message": "Reference execution requires --harness with a valid harness executable path.",
             }
         )
-    if execution_mode == "execute_reference" and reference_plugin is None:
+    if reference_plugin is None and reference_plugin_selection["blockingReason"] is not None:
+        blocking_issues.append(
+            {
+                "code": reference_plugin_selection["blockingCode"],
+                "message": reference_plugin_selection["blockingReason"],
+            }
+        )
+    elif execution_mode == "execute_reference" and reference_plugin is None:
         blocking_issues.append(
             {
                 "code": "missing_reference_plugin",
-                "message": "Reference execution requires --reference-plugin with a valid plugin path.",
+                "message": "Reference execution requires a usable reference plugin selected through --reference-plugin or --reference-search-root.",
             }
         )
     elif (
@@ -998,6 +1214,7 @@ def build_reference_render_plan(
         "referenceCaseId": case_id,
         "referencePluginPath": plugin_path,
         "referencePluginFormat": reference_plugin["format"] if reference_plugin else None,
+        "referencePluginSelection": reference_plugin_selection,
         "harnessPath": harness_path,
         "runnable": not blocking_issues,
         "captureReadiness": "ready" if not blocking_issues else "blocked",
@@ -1013,6 +1230,7 @@ def build_case_record(
     baseline_defaults: dict,
     plugin_under_test: str | None,
     reference_plugin: dict | None,
+    reference_plugin_selection: dict,
     harness: dict | None,
     reference_workflow: dict,
     execution_mode: str,
@@ -1035,6 +1253,7 @@ def build_case_record(
         case_record["resolvedInput"],
         settings,
         reference_plugin,
+        reference_plugin_selection,
         harness,
         reference_workflow,
         execution_mode,
@@ -1065,6 +1284,7 @@ def build_case_record(
         "referenceStateStatus": case_record["resolvedReferenceState"]["status"],
         "resolvedReferenceState": case_record["resolvedReferenceState"],
         "resolvedReferencePlugin": reference_plugin,
+        "referencePluginSelection": reference_plugin_selection,
         "resolvedHarness": harness,
         "expectedArtifacts": expected_artifacts,
         "referenceRenderPlan": reference_render_plan,
@@ -1090,6 +1310,7 @@ def prepare_cases(
     baseline_defaults: dict,
     plugin_under_test: str | None,
     reference_plugin: dict | None,
+    reference_plugin_selection: dict,
     harness: dict | None,
     reference_workflow: dict,
     execution_mode: str,
@@ -1106,6 +1327,7 @@ def prepare_cases(
                 baseline_defaults,
                 plugin_under_test,
                 reference_plugin,
+                reference_plugin_selection,
                 harness,
                 reference_workflow,
                 execution_mode,
@@ -1131,6 +1353,7 @@ def build_case_plan_payload(case: dict) -> dict:
         "referenceStateStatus": case["referenceStateStatus"],
         "resolvedReferenceState": case["resolvedReferenceState"],
         "resolvedReferencePlugin": case["resolvedReferencePlugin"],
+        "referencePluginSelection": case["referencePluginSelection"],
         "resolvedHarness": case["resolvedHarness"],
         "expectedArtifacts": case["expectedArtifacts"],
         "referenceRenderPlan": case["referenceRenderPlan"],
@@ -1159,6 +1382,7 @@ def build_reference_capture_payload(case: dict) -> dict:
         "referenceStateStatus": case["referenceStateStatus"],
         "resolvedReferenceState": case["resolvedReferenceState"],
         "resolvedReferencePlugin": case["resolvedReferencePlugin"],
+        "referencePluginSelection": case["referencePluginSelection"],
         "resolvedHarness": case["resolvedHarness"],
         "referenceRenderPlan": case["referenceRenderPlan"],
         "captureReadiness": case["captureReadiness"],
@@ -1371,6 +1595,14 @@ def compact_case_summary(case: dict) -> dict:
         "captureReadiness": case["captureReadiness"],
         "referenceStateId": case["referenceStateId"],
         "referenceStateStatus": case["referenceStateStatus"],
+        "referencePluginSelectionStatus": case["referencePluginSelection"][
+            "resolutionStatus"
+        ],
+        "selectedReferencePluginPath": (
+            case["referencePluginSelection"]["selectedCandidate"]["resolvedPath"]
+            if case["referencePluginSelection"]["selectedCandidate"] is not None
+            else None
+        ),
         "referencePluginFormat": (
             case["resolvedReferencePlugin"]["format"]
             if case["resolvedReferencePlugin"] is not None
@@ -1448,6 +1680,19 @@ def build_group_summary(
         "scaffoldOnly": all(case["scaffoldOnly"] for case in cases) if cases else True,
         "rendersExecuted": any(case["rendersExecuted"] for case in cases),
         "summaryPath": str(summary_path.as_posix()),
+        "referencePluginSelection": (
+            cases[0]["referencePluginSelection"] if cases else None
+        ),
+        "selectedReferencePluginPath": (
+            cases[0]["referencePluginSelection"]["selectedCandidate"]["resolvedPath"]
+            if cases and cases[0]["referencePluginSelection"]["selectedCandidate"] is not None
+            else None
+        ),
+        "selectedReferencePluginFormat": (
+            cases[0]["referencePluginSelection"]["selectedCandidate"]["format"]
+            if cases and cases[0]["referencePluginSelection"]["selectedCandidate"] is not None
+            else None
+        ),
         "caseCount": len(cases),
         "caseIds": [case["caseId"] for case in cases],
         "referenceStateIds": reference_state_usage["referenceStateIds"],
@@ -1540,11 +1785,16 @@ def main() -> int:
         reference_states_by_id,
     )
 
-    reference_plugin = resolve_reference_plugin(
-        repo_root, args.reference_plugin, reference_workflow
+    reference_plugin, reference_plugin_selection = resolve_reference_plugin_selection(
+        repo_root,
+        args.reference_plugin,
+        args.reference_search_root,
+        reference_workflow,
     )
     harness = resolve_harness(repo_root, args.harness)
-    validate_execution_prerequisites(execution_mode, reference_plugin, harness)
+    validate_execution_prerequisites(
+        execution_mode, reference_plugin, reference_plugin_selection, harness
+    )
 
     timestamp = timestamp_slug()
     artifacts_root = (repo_root / args.artifacts_root).resolve()
@@ -1557,6 +1807,7 @@ def main() -> int:
         manifest["baselineDefaults"],
         args.plugin_under_test,
         reference_plugin,
+        reference_plugin_selection,
         harness,
         reference_workflow,
         execution_mode,
@@ -1643,6 +1894,10 @@ def main() -> int:
             summary_notes.append(
                 "At least one selected case was blocked by current plugin-format or harness compatibility constraints."
             )
+    if reference_plugin_selection["searchRequested"]:
+        summary_notes.append(
+            "Reference plugin discovery searched the requested roots and recorded candidate compatibility before selecting a plugin or declaring capture blocked."
+        )
     summary_notes.append(
         "Reference states may still be planned or pending_capture scaffolds rather than captured Blackhole targets."
     )
@@ -1673,6 +1928,20 @@ def main() -> int:
         "emptyGroups": empty_groups,
         "pluginUnderTest": args.plugin_under_test,
         "referencePlugin": args.reference_plugin,
+        "referencePluginRequestedPath": args.reference_plugin,
+        "referencePluginSearchRoots": reference_plugin_selection["searchRoots"],
+        "referencePluginDiscovery": reference_plugin_selection,
+        "selectedReferencePluginPath": (
+            reference_plugin_selection["selectedCandidate"]["resolvedPath"]
+            if reference_plugin_selection["selectedCandidate"] is not None
+            else None
+        ),
+        "selectedReferencePluginFormat": (
+            reference_plugin_selection["selectedCandidate"]["format"]
+            if reference_plugin_selection["selectedCandidate"] is not None
+            else None
+        ),
+        "referencePluginSelectionReason": reference_plugin_selection["selectionReason"],
         "resolvedReferencePlugin": reference_plugin,
         "resolvedHarness": harness,
         "referenceCaptureWorkflow": reference_workflow,
@@ -1725,6 +1994,24 @@ def main() -> int:
         print(f"Resolved reference plugin: {reference_plugin['resolvedPath']}")
     else:
         print("Resolved reference plugin: (not provided)")
+    if reference_plugin_selection["searchRequested"]:
+        print(
+            "Reference search roots: "
+            + ", ".join(
+                root["resolvedPath"] for root in reference_plugin_selection["searchRoots"]
+            )
+        )
+        print(
+            "Discovered reference candidates: "
+            + (
+                ", ".join(
+                    candidate["resolvedPath"]
+                    for candidate in reference_plugin_selection["discoveredCandidates"]
+                )
+                if reference_plugin_selection["discoveredCandidates"]
+                else "(none)"
+            )
+        )
     if harness is not None:
         print(f"Resolved harness: {harness['resolvedPath']}")
     else:

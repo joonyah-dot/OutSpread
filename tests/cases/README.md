@@ -98,11 +98,27 @@ Reference execution is explicit:
 py -3 scripts\run_measurements.py --groups smoke,attack --reference-plugin "C:\Path\To\Blackhole.vst3" --harness "C:\Path\To\vst3_harness.exe" --execute-reference
 ```
 
+Reference plugin discovery can also search local resource roots:
+
+```powershell
+py -3 scripts\run_measurements.py --groups smoke,attack,predelay --reference-search-root "C:\dev\resources\Eventide"
+```
+
+If both `--reference-plugin` and `--reference-search-root` are provided, the explicit plugin path wins and the search roots are ignored for selection.
+
 The current repo capture workflow is `vst3_harness`, and it currently supports VST3 reference plugins only. A VST2 `.dll` path can still be checked and surfaced in planning artifacts, but it remains blocked for real capture and leaves the linked reference states in `pending_capture`.
+
+When search roots are used, the runner records:
+
+- which roots were searched
+- which Blackhole candidates were discovered
+- the detected format for each candidate
+- whether each candidate is compatible with the current workflow
+- which candidate was selected and why
 
 Execution mode requires:
 
-- a valid `--reference-plugin` path
+- a valid `--reference-plugin` path or a search root that resolves to a usable reference plugin
 - a valid `--harness` path for the current render workflow
 
 If those prerequisites are missing or invalid, or if the provided plugin format is unsupported by the current workflow, the runner fails clearly or records a blocked capture state instead of pretending capture happened.

@@ -64,3 +64,5 @@ The runner then writes a harness-ready `reference_case.json` into the per-case a
 Current state files may still be `planned` or `pending_capture`. Running execution against one of those states does not silently upgrade it to `captured`. The state file should only move to `captured` when a follow-up ticket records the exact Blackhole target values and the relevant reference-lock details honestly.
 
 If a capture attempt is blocked because the installed plugin format does not match the current harness workflow, the linked state files stay `pending_capture`. Blocked execution artifacts should explain the limitation rather than promoting the state.
+
+This also applies when the runner discovers candidate plugins through `--reference-search-root`: a found Blackhole VST2 `.dll` is still a real discovery result, but it remains blocked and does not promote linked states unless the active capture workflow can use that format.
