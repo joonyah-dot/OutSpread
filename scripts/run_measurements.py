@@ -347,7 +347,7 @@ def discover_reference_state_files(
 
 
 def normalize_reference_state_record(state_path: Path, state_data: dict) -> dict:
-    return {
+    normalized = {
         "id": state_data["id"],
         "status": state_data["status"],
         "description": state_data["description"],
@@ -361,6 +361,9 @@ def normalize_reference_state_record(state_path: Path, state_data: dict) -> dict
         ),
         "stateFilePath": str(state_path.resolve().as_posix()),
     }
+    if "capture" in state_data:
+        normalized["capture"] = state_data["capture"]
+    return normalized
 
 
 def validate_reference_state_object(
@@ -438,6 +441,50 @@ def validate_reference_state_object(
         raise SystemExit(
             f"error: reference-state file {state_path} field 'paramsByIndex' must be an object."
         )
+
+    if "capture" in state_data:
+        capture = state_data["capture"]
+        if not isinstance(capture, dict):
+            raise SystemExit(
+                f"error: reference-state file {state_path} field 'capture' must be an object."
+            )
+        if "capturedAt" in capture and not isinstance(capture["capturedAt"], str):
+            raise SystemExit(
+                f"error: reference-state file {state_path} field 'capture.capturedAt' must be a string."
+            )
+        if "referencePluginPath" in capture and not isinstance(
+            capture["referencePluginPath"], str
+        ):
+            raise SystemExit(
+                f"error: reference-state file {state_path} field 'capture.referencePluginPath' must be a string."
+            )
+        if "referencePluginFormat" in capture and not isinstance(
+            capture["referencePluginFormat"], str
+        ):
+            raise SystemExit(
+                f"error: reference-state file {state_path} field 'capture.referencePluginFormat' must be a string."
+            )
+        if "harnessPath" in capture and capture["harnessPath"] is not None and not isinstance(
+            capture["harnessPath"], str
+        ):
+            raise SystemExit(
+                f"error: reference-state file {state_path} field 'capture.harnessPath' must be null or a string."
+            )
+        for numeric_field in ("sampleRate", "blockSize", "channels"):
+            if numeric_field in capture and (
+                not isinstance(capture[numeric_field], int) or capture[numeric_field] <= 0
+            ):
+                raise SystemExit(
+                    f"error: reference-state file {state_path} field 'capture.{numeric_field}' must be a positive integer."
+                )
+        if "capturedCases" in capture:
+            captured_cases = capture["capturedCases"]
+            if not isinstance(captured_cases, list) or not all(
+                isinstance(item, dict) for item in captured_cases
+            ):
+                raise SystemExit(
+                    f"error: reference-state file {state_path} field 'capture.capturedCases' must be a list of objects."
+                )
 
     normalize_notes(
         state_data.get("notes"),
@@ -1488,6 +1535,121 @@ def mark_case_skipped(case: dict, reason: str) -> None:
     case["notes"] = list(case["notes"]) + [reason]
 
 
+def append_note_once(notes: list[str], note: str) -> list[str]:
+    return notes if note in notes else notes + [note]
+
+
+def platform_label() -> str:
+    if sys.platform.startswith("win"):
+        return "Windows"
+    if sys.platform.startswith("darwin"):
+        return "macOS"
+    if sys.platform.startswith("linux"):
+        return "Linux"
+    return sys.platform
+
+
+def build_state_capture_record(state_cases: list[dict]) -> dict:
+    first_case = state_cases[0]
+    last_finished_at = max(
+        case["executionResult"]["finishedAt"] or ""
+        for case in state_cases
+    )
+    return {
+        "schemaVersion": 1,
+        "capturedAt": last_finished_at,
+        "referencePluginPath": first_case["resolvedReferencePlugin"]["resolvedPath"],
+        "referencePluginFormat": first_case["resolvedReferencePlugin"]["format"],
+        "harnessPath": (
+            first_case["resolvedHarness"]["resolvedPath"]
+            if first_case["resolvedHarness"] is not None
+            else None
+        ),
+        "sampleRate": first_case["resolvedSettings"]["sampleRate"],
+        "blockSize": first_case["resolvedSettings"]["blockSize"],
+        "channels": first_case["resolvedSettings"]["channels"],
+        "runDirectory": str(
+            Path(first_case["expectedArtifacts"]["caseDirectory"]).parent.parent.as_posix()
+        ),
+        "capturedCases": [
+            {
+                "caseId": case["caseId"],
+                "group": case["group"],
+                "executionStatus": case["executionStatus"],
+                "casePlanPath": case["expectedArtifacts"]["casePlanPath"],
+                "referenceCapturePath": case["expectedArtifacts"]["referenceCapturePath"],
+                "referenceDirectory": case["expectedArtifacts"]["referenceDirectory"],
+                "referenceWetPath": case["expectedArtifacts"]["referenceWetPath"],
+                "referenceMetricsPath": case["expectedArtifacts"]["referenceMetricsPath"],
+                "renderStdoutPath": case["expectedArtifacts"]["renderStdoutPath"],
+                "renderStderrPath": case["expectedArtifacts"]["renderStderrPath"],
+                "analyzeStdoutPath": case["expectedArtifacts"]["analyzeStdoutPath"],
+                "analyzeStderrPath": case["expectedArtifacts"]["analyzeStderrPath"],
+            }
+            for case in state_cases
+        ],
+        "notes": [
+            "This state is backed by real reference capture artifacts from the current runner workflow.",
+            "Normalized parameter extraction is not yet stored in this state file unless paramsByName or paramsByIndex are populated separately.",
+        ],
+    }
+
+
+def promote_captured_reference_states(flat_cases: list[dict]) -> list[str]:
+    cases_by_state_id: dict[str, list[dict]] = {}
+    for case in flat_cases:
+        cases_by_state_id.setdefault(case["referenceStateId"], []).append(case)
+
+    promoted_state_ids: list[str] = []
+    for state_id, state_cases in sorted(cases_by_state_id.items()):
+        if not state_cases or any(
+            case["executionStatus"] != "executed_success" for case in state_cases
+        ):
+            continue
+
+        state_path = Path(state_cases[0]["resolvedReferenceState"]["stateFilePath"])
+        state_data = load_json(state_path)
+        existing_notes = normalize_notes(
+            state_data.get("notes"),
+            f"reference-state file {state_path} field 'notes'",
+        )
+        capture_record = build_state_capture_record(state_cases)
+
+        state_data["status"] = "captured"
+        state_data["sourceType"] = "reference_render_capture"
+        state_data["referenceLock"]["platform"] = platform_label()
+        state_data["referenceLock"]["hostOrRenderPath"] = capture_record["harnessPath"]
+        state_data["referenceLock"]["baselineSampleRate"] = capture_record["sampleRate"]
+        state_data["referenceLock"]["baselineBlockSize"] = capture_record["blockSize"]
+        state_data["capture"] = capture_record
+        state_data["notes"] = append_note_once(
+            existing_notes,
+            (
+                "Initial Blackhole VST3 baseline capture succeeded for this state via "
+                "vst3_harness. The state is now backed by real capture artifacts even "
+                "though normalized parameter extraction may still be pending."
+            ),
+        )
+
+        write_json(state_path, state_data)
+        normalized_state = normalize_reference_state_record(state_path, state_data)
+        for case in state_cases:
+            case["referenceStateStatus"] = "captured"
+            case["resolvedReferenceState"] = normalized_state
+            case["notes"] = [
+                note
+                for note in case["notes"]
+                if note != "This case is linked to a reference state that is not yet marked captured."
+            ]
+            case["notes"] = append_note_once(
+                case["notes"],
+                "This case is now backed by a real Blackhole VST3 capture artifact from the current harness workflow.",
+            )
+        promoted_state_ids.append(state_id)
+
+    return promoted_state_ids
+
+
 def execute_reference_cases(
     flat_cases: list[dict],
     repo_root: Path,
@@ -1592,6 +1754,10 @@ def compact_case_summary(case: dict) -> dict:
         "caseId": case["caseId"],
         "executionStatus": case["executionStatus"],
         "rendersExecuted": case["rendersExecuted"],
+        "backedByRealCaptureArtifact": (
+            case["executionStatus"] == "executed_success"
+            and case["referenceStateStatus"] == "captured"
+        ),
         "captureReadiness": case["captureReadiness"],
         "referenceStateId": case["referenceStateId"],
         "referenceStateStatus": case["referenceStateStatus"],
@@ -1819,6 +1985,10 @@ def main() -> int:
     if execution_mode == "execute_reference":
         all_success = execute_reference_cases(flat_cases, repo_root, args.keep_going)
 
+    promoted_state_ids: list[str] = []
+    if execution_mode == "execute_reference":
+        promoted_state_ids = promote_captured_reference_states(flat_cases)
+
     write_case_artifacts(flat_cases)
 
     empty_groups: list[str] = []
@@ -1855,7 +2025,6 @@ def main() -> int:
     )
     execution_counts = summarize_execution_statuses(all_cases)
     blocking_issues = collect_blocking_issues(all_cases)
-    promoted_state_ids: list[str] = []
     pending_state_ids = [
         state["id"]
         for state in reference_state_usage["referenceStates"]
@@ -1893,6 +2062,11 @@ def main() -> int:
         if blocking_issues:
             summary_notes.append(
                 "At least one selected case was blocked by current plugin-format or harness compatibility constraints."
+            )
+        if promoted_state_ids:
+            summary_notes.append(
+                "Promoted reference states to captured for successful cases in this run: "
+                + ", ".join(promoted_state_ids)
             )
     if reference_plugin_selection["searchRequested"]:
         summary_notes.append(

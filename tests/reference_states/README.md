@@ -30,6 +30,8 @@ Each reusable state file should define:
 
 Prefer `paramsByName` as the source of truth. Use `paramsByIndex` only when compatibility requires it.
 
+Captured states may also include an optional `capture` object that records the real reference-capture run backing the state, including plugin path, harness path, execution settings, and artifact paths.
+
 ## Status Values
 
 Use the status field honestly:
@@ -39,6 +41,8 @@ Use the status field honestly:
 - `captured`: the exact Blackhole target state has been captured and documented with the relevant reference-lock details
 
 Current files in this directory may still be planning or pending-capture scaffolds. They do not claim that real Blackhole state capture has already happened.
+
+After Ticket 9, the narrow baseline states linked to `smoke`, `attack`, and `predelay` may be marked `captured` when they are backed by real Blackhole VST3 artifacts from the current `vst3_harness` workflow. That captured status is still compatible with empty `paramsByName` when normalized parameter extraction has not been recorded yet.
 
 ## Reference Lock
 

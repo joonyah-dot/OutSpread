@@ -12,7 +12,8 @@
     "planned_blackhole_capture",
     "manual_capture",
     "harness_dump",
-    "host_saved_state"
+    "host_saved_state",
+    "reference_render_capture"
   ],
   "preferredParameterAssignment": "paramsByName",
   "stateFields": {
@@ -27,7 +28,8 @@
       "notes"
     ],
     "optional": [
-      "paramsByIndex"
+      "paramsByIndex",
+      "capture"
     ]
   },
   "referenceLockFields": [

@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_attack_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "attack",
-  "scaffoldOnly": true,
-  "notes": "Planning-only attack case. Final Blackhole attack state capture is still pending."
+  "scaffoldOnly": false,
+  "notes": "Initial Blackhole VST3 attack baseline case using click-train input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }

@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_predelay_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "predelay",
-  "scaffoldOnly": true,
-  "notes": "Planning-only predelay case placeholder pending exact predelay reference-state capture."
+  "scaffoldOnly": false,
+  "notes": "Initial Blackhole VST3 predelay baseline case using click-train input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }

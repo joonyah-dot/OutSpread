@@ -8,6 +8,6 @@
   "referenceStateId": "blackhole_smoke_default",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "smoke",
-  "scaffoldOnly": true,
-  "notes": "Planning-only smoke case that verifies grouped case discovery and impulse stimulus resolution."
+  "scaffoldOnly": false,
+  "notes": "Initial Blackhole VST3 smoke baseline case using impulse input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }

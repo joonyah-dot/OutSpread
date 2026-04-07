@@ -1,21 +1,53 @@
 {
   "id": "blackhole_attack_probe",
-  "status": "pending_capture",
+  "status": "captured",
   "description": "Reusable Blackhole attack and bloom target state for transient-onset comparison work.",
   "targetGroups": [
     "attack"
   ],
-  "sourceType": "planned_blackhole_capture",
+  "sourceType": "reference_render_capture",
   "referenceLock": {
     "pluginVersion": null,
-    "platform": null,
-    "hostOrRenderPath": null,
+    "platform": "Windows",
+    "hostOrRenderPath": "C:/dev/OutSpread/build_harness_check/tools/vst3_harness/vst3_harness_artefacts/Release/vst3_harness.exe",
     "baselineSampleRate": 48000,
     "baselineBlockSize": 256
   },
   "paramsByName": {},
   "notes": [
     "Final Blackhole attack-state capture is still pending.",
-    "Future tickets should replace the empty parameter set with real captured values."
-  ]
+    "Future tickets should replace the empty parameter set with real captured values.",
+    "Initial Blackhole VST3 baseline capture succeeded for this state via vst3_harness. The state is now backed by real capture artifacts even though normalized parameter extraction may still be pending."
+  ],
+  "capture": {
+    "schemaVersion": 1,
+    "capturedAt": "2026-04-06T21:44:43",
+    "referencePluginPath": "C:/Program Files/Common Files/VST3/Eventide/Blackhole.vst3",
+    "referencePluginFormat": "vst3",
+    "harnessPath": "C:/dev/OutSpread/build_harness_check/tools/vst3_harness/vst3_harness_artefacts/Release/vst3_harness.exe",
+    "sampleRate": 48000,
+    "blockSize": 256,
+    "channels": 2,
+    "runDirectory": "C:/dev/OutSpread/artifacts/measurements/20260406_214442",
+    "capturedCases": [
+      {
+        "caseId": "attack_click_train_scaffold",
+        "group": "attack",
+        "executionStatus": "executed_success",
+        "casePlanPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/case_plan.json",
+        "referenceCapturePath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference_capture.json",
+        "referenceDirectory": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference",
+        "referenceWetPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference/wet.wav",
+        "referenceMetricsPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference/metrics.json",
+        "renderStdoutPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference/render_stdout.txt",
+        "renderStderrPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference/render_stderr.txt",
+        "analyzeStdoutPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference/analyze_stdout.txt",
+        "analyzeStderrPath": "C:/dev/OutSpread/artifacts/measurements/20260406_214442/cases/attack_click_train_scaffold/reference/analyze_stderr.txt"
+      }
+    ],
+    "notes": [
+      "This state is backed by real reference capture artifacts from the current runner workflow.",
+      "Normalized parameter extraction is not yet stored in this state file unless paramsByName or paramsByIndex are populated separately."
+    ]
+  }
 }
