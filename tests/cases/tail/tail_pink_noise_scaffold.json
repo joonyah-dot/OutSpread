@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_tail_probe",
   "expectedDeterminism": "deterministic_input",
   "analysisProfile": "tail",
-  "scaffoldOnly": true,
-  "notes": "Planning-only tail case using deterministic pink noise. Final reference state capture is still pending."
+  "scaffoldOnly": false,
+  "notes": "Blackhole VST3 tail baseline case using deterministic pink-noise input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }

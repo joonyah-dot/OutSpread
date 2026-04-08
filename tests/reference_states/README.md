@@ -42,7 +42,7 @@ Use the status field honestly:
 
 Current files in this directory may still be planning or pending-capture scaffolds. They do not claim that real Blackhole state capture has already happened.
 
-After Ticket 9, the narrow baseline states linked to `smoke`, `attack`, and `predelay` may be marked `captured` when they are backed by real Blackhole VST3 artifacts from the current `vst3_harness` workflow. That captured status is still compatible with empty `paramsByName` when normalized parameter extraction has not been recorded yet.
+After Tickets 9 and 10, the narrow baseline states linked to `smoke`, `attack`, `predelay`, `width`, `gravity`, and `tail` may be marked `captured` when they are backed by real Blackhole VST3 artifacts from the current `vst3_harness` workflow. That captured status is still compatible with empty `paramsByName` when normalized parameter extraction has not been recorded yet.
 
 ## Reference Lock
 

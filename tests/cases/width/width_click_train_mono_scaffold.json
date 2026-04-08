@@ -10,6 +10,6 @@
   "referenceStateId": "blackhole_width_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "width",
-  "scaffoldOnly": true,
-  "notes": "Planning-only mono-input width case placeholder pending captured stereo-spread reference state."
+  "scaffoldOnly": false,
+  "notes": "Blackhole VST3 width baseline case using mono click-train input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }

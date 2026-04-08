@@ -164,6 +164,6 @@ The runner records the resolved settings per case in the timestamped planning ar
 
 `example.json` remains in this directory as a simple early harness example. New measurement work should use the grouped directories and manifest-driven vocabulary introduced in this ticket.
 
-Current grouped cases are still scaffold or planning cases. They exercise orchestration, defaults, overrides, and stimulus resolution, but they do not claim that final Blackhole reference states have already been captured.
+Most grouped cases start as scaffold or planning cases so they can exercise orchestration, defaults, overrides, and stimulus resolution before real capture exists.
 
-After Ticket 9, the narrow `smoke`, `attack`, and `predelay` baseline cases may be backed by real Blackhole VST3 capture artifacts. When a case is no longer planning-only, set `scaffoldOnly` to `false` and keep the note text honest about whether normalized parameter extraction is still pending.
+After Tickets 9 and 10, the narrow `smoke`, `attack`, `predelay`, `width`, `gravity`, and `tail` baseline cases may be backed by real Blackhole VST3 capture artifacts. When a case is no longer planning-only, set `scaffoldOnly` to `false` and keep the note text honest about whether normalized parameter extraction is still pending.

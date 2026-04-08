@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_gravity_probe",
   "expectedDeterminism": "deterministic",
   "analysisProfile": "gravity",
-  "scaffoldOnly": true,
-  "notes": "Planning-only gravity case placeholder pending measured negative, center, and positive reference states."
+  "scaffoldOnly": false,
+  "notes": "Blackhole VST3 gravity baseline case using click-train input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }
