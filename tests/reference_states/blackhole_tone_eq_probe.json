@@ -1,21 +1,53 @@
 {
   "id": "blackhole_tone_eq_probe",
-  "status": "pending_capture",
+  "status": "captured",
   "description": "Reusable Blackhole tone and resonance target state for future tone/eq capture work.",
   "targetGroups": [
     "tone_eq"
   ],
-  "sourceType": "planned_blackhole_capture",
+  "sourceType": "reference_render_capture",
   "referenceLock": {
     "pluginVersion": null,
-    "platform": null,
-    "hostOrRenderPath": null,
+    "platform": "Windows",
+    "hostOrRenderPath": "C:/dev/OutSpread/build_harness_check/tools/vst3_harness/vst3_harness_artefacts/Release/vst3_harness.exe",
     "baselineSampleRate": 48000,
     "baselineBlockSize": 256
   },
   "paramsByName": {},
   "notes": [
     "This state is a planning placeholder for low tone, high tone, and resonance capture.",
-    "It does not imply that tone/eq reference values have already been recorded."
-  ]
+    "It does not imply that tone/eq reference values have already been recorded.",
+    "Initial Blackhole VST3 baseline capture succeeded for this state via vst3_harness. The state is now backed by real capture artifacts even though normalized parameter extraction may still be pending."
+  ],
+  "capture": {
+    "schemaVersion": 1,
+    "capturedAt": "2026-04-08T19:11:16",
+    "referencePluginPath": "C:/Program Files/Common Files/VST3/Eventide/Blackhole.vst3",
+    "referencePluginFormat": "vst3",
+    "harnessPath": "C:/dev/OutSpread/build_harness_check/tools/vst3_harness/vst3_harness_artefacts/Release/vst3_harness.exe",
+    "sampleRate": 48000,
+    "blockSize": 256,
+    "channels": 2,
+    "runDirectory": "C:/dev/OutSpread/artifacts/measurements/20260408_191116",
+    "capturedCases": [
+      {
+        "caseId": "tone_eq_white_noise_scaffold",
+        "group": "tone_eq",
+        "executionStatus": "executed_success",
+        "casePlanPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/case_plan.json",
+        "referenceCapturePath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference_capture.json",
+        "referenceDirectory": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference",
+        "referenceWetPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference/wet.wav",
+        "referenceMetricsPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference/metrics.json",
+        "renderStdoutPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference/render_stdout.txt",
+        "renderStderrPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference/render_stderr.txt",
+        "analyzeStdoutPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference/analyze_stdout.txt",
+        "analyzeStderrPath": "C:/dev/OutSpread/artifacts/measurements/20260408_191116/cases/tone_eq_white_noise_scaffold/reference/analyze_stderr.txt"
+      }
+    ],
+    "notes": [
+      "This state is backed by real reference capture artifacts from the current runner workflow.",
+      "Normalized parameter extraction is not yet stored in this state file unless paramsByName or paramsByIndex are populated separately."
+    ]
+  }
 }

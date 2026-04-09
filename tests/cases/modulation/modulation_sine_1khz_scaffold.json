@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_modulation_probe",
   "expectedDeterminism": "time_varying_target_expected",
   "analysisProfile": "modulation",
-  "scaffoldOnly": true,
-  "notes": "Planning-only modulation case. This is not a captured reference state and does not imply sample-identical target behavior."
+  "scaffoldOnly": false,
+  "notes": "Blackhole VST3 modulation baseline case using a 1 kHz sine input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }

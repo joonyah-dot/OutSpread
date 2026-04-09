@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_freeze_infinite_probe",
   "expectedDeterminism": "time_varying_target_expected",
   "analysisProfile": "freeze_infinite",
-  "scaffoldOnly": true,
-  "notes": "Planning-only long-run freeze/infinite case placeholder pending captured reference latch states."
+  "scaffoldOnly": false,
+  "notes": "Blackhole VST3 freeze/infinite baseline case using deterministic pink-noise input. The existing 60-second long-run capture was preserved for a truthful baseline, and real capture artifacts now exist for this case."
 }

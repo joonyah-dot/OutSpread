@@ -166,4 +166,6 @@ The runner records the resolved settings per case in the timestamped planning ar
 
 Most grouped cases start as scaffold or planning cases so they can exercise orchestration, defaults, overrides, and stimulus resolution before real capture exists.
 
-After Tickets 9 and 10, the narrow `smoke`, `attack`, `predelay`, `width`, `gravity`, and `tail` baseline cases may be backed by real Blackhole VST3 capture artifacts. When a case is no longer planning-only, set `scaffoldOnly` to `false` and keep the note text honest about whether normalized parameter extraction is still pending.
+After Tickets 9, 10, and 11, the narrow `smoke`, `attack`, `predelay`, `width`, `gravity`, `tail`, `tone_eq`, `modulation`, and `freeze_infinite` baseline cases may be backed by real Blackhole VST3 capture artifacts. When a case is no longer planning-only, set `scaffoldOnly` to `false` and keep the note text honest about whether normalized parameter extraction is still pending.
+
+The current `freeze_infinite` baseline case keeps its 60-second render window. Do not shorten it casually just to make capture faster; if a future ticket changes that duration, document the reason in the case file or paired measurement notes.

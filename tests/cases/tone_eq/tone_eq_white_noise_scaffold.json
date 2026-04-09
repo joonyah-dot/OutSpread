@@ -9,6 +9,6 @@
   "referenceStateId": "blackhole_tone_eq_probe",
   "expectedDeterminism": "deterministic_input",
   "analysisProfile": "tone_eq",
-  "scaffoldOnly": true,
-  "notes": "Planning-only tone/eq case placeholder pending captured low tone, high tone, and resonance states."
+  "scaffoldOnly": false,
+  "notes": "Blackhole VST3 tone/eq baseline case using white-noise input. Real capture artifacts now exist for this case, while normalized parameter extraction remains pending."
 }
