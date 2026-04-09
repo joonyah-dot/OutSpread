@@ -1,0 +1,19 @@
+{
+  "id": "outspread_shell_kill_default_mix_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "kill": 1.0
+  },
+  "shellVerification": {
+    "expectation": "matches_case",
+    "compareToCaseId": "outspread_shell_default_smoke"
+  },
+  "notes": "Kill currently clears only the wet scaffold path. With the default fully dry Mix setting, this should still match the default shell output."
+}

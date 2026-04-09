@@ -1,0 +1,19 @@
+{
+  "id": "outspread_shell_mix_full_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "mix": 1.0
+  },
+  "shellVerification": {
+    "expectation": "matches_case",
+    "compareToCaseId": "outspread_shell_default_smoke"
+  },
+  "notes": "At shell stage the wet scaffold mirrors routed input, so Mix=100 should still render the same audible output as the default shell case."
+}

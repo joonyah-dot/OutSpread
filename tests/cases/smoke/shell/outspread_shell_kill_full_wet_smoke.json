@@ -1,0 +1,19 @@
+{
+  "id": "outspread_shell_kill_full_wet_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "kill": 1.0
+  },
+  "shellVerification": {
+    "expectation": "silent_output"
+  },
+  "notes": "With Mix fully wet and Kill engaged, the current shell should mute the wet scaffold path and produce silence."
+}

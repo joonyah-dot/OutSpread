@@ -1,0 +1,16 @@
+{
+  "id": "outspread_shell_default_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {},
+  "shellVerification": {
+    "expectation": "near_passthrough"
+  },
+  "notes": "Verifies the current OutSpread shell default path. This is a shell-smoke case, not a Blackhole reference case."
+}

@@ -59,3 +59,43 @@ target_link_libraries(
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+juce_add_console_app(
+    OutSpreadShellVerifier
+    PRODUCT_NAME "OutSpreadShellVerifier"
+)
+
+juce_generate_juce_header(OutSpreadShellVerifier)
+
+target_sources(
+    OutSpreadShellVerifier
+    PRIVATE
+    Source/ShellVerifierMain.cpp
+    Source/PluginProcessor.cpp
+    Source/PluginProcessor.h
+    Source/PluginEditor.cpp
+    Source/PluginEditor.h
+)
+
+target_compile_features(
+    OutSpreadShellVerifier
+    PRIVATE cxx_std_17
+)
+
+target_compile_definitions(
+    OutSpreadShellVerifier
+    PRIVATE
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0
+)
+
+target_link_libraries(
+    OutSpreadShellVerifier
+    PRIVATE
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_gui_extra
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_lto_flags
+    juce::juce_recommended_warning_flags
+)

@@ -160,6 +160,31 @@ This writes timestamped outputs under `artifacts/reference_analysis/<timestamp>/
 
 These files are first-pass descriptive summaries of the captured Blackhole wet audio. They are meant to help later matching tickets understand onset timing, stereo shape, tail behavior, tonal weighting, modulation movement, and freeze/infinite sustain without claiming that parameter-law extraction is complete.
 
+## Shell Smoke Verification
+
+The initial OutSpread shell also has dedicated shell-verification cases under:
+
+- `tests/cases/smoke/shell/`
+
+These cases are intentionally separate from the manifest-driven reference-capture set. They verify the current plugin shell rather than the Blackhole target, so they are not discovered by `scripts/run_measurements.py`.
+
+Run them with:
+
+```powershell
+py -3 scripts\verify_shell_smoke.py
+```
+
+That script checks:
+
+- default passthrough-oriented shell behavior
+- Mix at 100 percent in the current shell scaffold
+- Kill in both default-mix and full-wet shell states
+- parameter/state round-trip through the plugin state blob
+- stereo-to-stereo passthrough through the harness
+- mono-in to stereo-out routing through the direct verifier helper
+
+The current harness still configures symmetric channel layouts only, so mono-in to stereo-out is verified through the small `OutSpreadShellVerifier` helper instead of a direct harness render.
+
 ## Adding Cases
 
 When adding a new case:
