@@ -70,3 +70,15 @@ Current state files may still be `planned` or `pending_capture`. Running executi
 If a capture attempt is blocked because the installed plugin format does not match the current harness workflow, the linked state files stay `pending_capture`. Blocked execution artifacts should explain the limitation rather than promoting the state.
 
 This also applies when the runner discovers candidate plugins through `--reference-search-root`: a found Blackhole VST2 `.dll` is still a real discovery result, but it remains blocked and does not promote linked states unless the active capture workflow can use that format.
+
+## Reference Analysis
+
+Captured state records can be turned into first-pass descriptive summaries with:
+
+```powershell
+py -3 scripts\analyze_reference_captures.py
+```
+
+The analysis script resolves source artifacts from each captured state's `capture` metadata first, then falls back to a deterministic scan of `artifacts/measurements/` only if needed. Outputs are written under `artifacts/reference_analysis/<timestamp>/`.
+
+These summaries are intentionally narrower than final law extraction. They describe the current captured Blackhole artifacts with practical proxies such as onset timing, broad spectral balance, stereo relationship, envelope movement, and freeze/infinite drift. If a captured state is missing or its linked artifacts are broken, the analysis output marks that state unavailable instead of inventing results.

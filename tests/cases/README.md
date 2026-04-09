@@ -138,6 +138,28 @@ In execution mode, `reference_capture.json` records the command arguments, stdou
 
 If capture is blocked, the per-case artifacts record the blocking reason explicitly and the case remains uncaptured.
 
+## Reference Analysis
+
+Captured baseline artifacts can be summarized without re-running capture:
+
+```powershell
+py -3 scripts\analyze_reference_captures.py
+```
+
+This writes timestamped outputs under `artifacts/reference_analysis/<timestamp>/`, including:
+
+- `summary.json`
+- `attack_analysis_summary.json`
+- `predelay_analysis_summary.json`
+- `width_analysis_summary.json`
+- `gravity_analysis_summary.json`
+- `tail_analysis_summary.json`
+- `tone_eq_analysis_summary.json`
+- `modulation_analysis_summary.json`
+- `freeze_analysis_summary.json`
+
+These files are first-pass descriptive summaries of the captured Blackhole wet audio. They are meant to help later matching tickets understand onset timing, stereo shape, tail behavior, tonal weighting, modulation movement, and freeze/infinite sustain without claiming that parameter-law extraction is complete.
+
 ## Adding Cases
 
 When adding a new case:
