@@ -19,7 +19,11 @@ public:
 
 private:
     juce::AudioBuffer<float> wetBuffer;
+    juce::AudioBuffer<float> delayBuffer;
     double currentSampleRate = 0.0;
     int currentOutputChannels = 0;
+    int maximumBlockSize = 0;
+    int maximumDelaySamples = 0;
+    int writePosition = 0;
 };
 } // namespace outspread

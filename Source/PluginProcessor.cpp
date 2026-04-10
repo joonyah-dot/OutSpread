@@ -62,7 +62,8 @@ void OutSpreadAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     for (auto channel = totalNumInputChannels; channel < totalNumOutputChannels; ++channel)
         buffer.clear (channel, 0, numSamples);
 
-    routedInputBuffer.setSize (2, numSamples, false, false, true);
+    if (routedInputBuffer.getNumChannels() != 2 || routedInputBuffer.getNumSamples() < numSamples)
+        routedInputBuffer.setSize (2, numSamples, false, false, true);
 
     prepareRoutedInput (buffer, numSamples);
 

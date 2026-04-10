@@ -43,7 +43,8 @@ struct ParameterSnapshot
     float mixDryEnd = 1.0f;
     float killWetGainStart = 1.0f;
     float killWetGainEnd = 1.0f;
-    float predelayMsSmoothed = 0.0f;
+    float predelayMsStart = 0.0f;
+    float predelayMsEnd = 0.0f;
     float feedbackNormalizedSmoothed = 0.5f;
 };
 

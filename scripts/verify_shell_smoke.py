@@ -265,6 +265,23 @@ def evaluate_case(case_data: dict, metrics: dict, case_dir: Path, completed_case
             issues.append("Kill+Mix=100 output was not silent enough")
         if metrics.get("wetRmsDbfs", 0.0) > -150.0:
             issues.append("Kill+Mix=100 RMS was not silent enough")
+    elif expectation == "predelay_latency":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        detected_latency = metrics.get("detectedLatencySamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay latency expectation is missing expectedLatencySamples")
+        elif not isinstance(detected_latency, (int, float)):
+            issues.append("predelay latency metrics are missing detectedLatencySamples")
+        else:
+            detected_latency = int(round(detected_latency))
+            if abs(detected_latency - expected_latency) > tolerance:
+                issues.append(
+                    f"detected predelay latency {detected_latency} samples did not match expected {expected_latency} +/- {tolerance}"
+                )
+        if metrics.get("wetPeakDbfs", -160.0) <= -40.0:
+            issues.append("predelay wet output was unexpectedly close to silence")
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
 
@@ -474,7 +491,7 @@ def main() -> int:
         "casesRoot": str(cases_root.as_posix()),
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
-            "The current shell remains passthrough-oriented: the wet scaffold mirrors routed input until later DSP tickets replace it.",
+            "The current shell remains conservative: the wet path is now a simple predelayed copy of routed input, not a reverb tail.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {

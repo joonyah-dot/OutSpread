@@ -131,7 +131,8 @@ ParameterSnapshot ParameterState::capture (int numSamples) noexcept
         numSamples
     );
 
-    snapshot.predelayMsSmoothed = interpolateSmoothingTarget (
+    snapshot.predelayMsStart = predelayMsSmoothed.getCurrentValue();
+    snapshot.predelayMsEnd = interpolateSmoothingTarget (
         predelayMsSmoothed,
         juce::jlimit (0.0f, 500.0f, snapshot.predelayMs),
         numSamples
