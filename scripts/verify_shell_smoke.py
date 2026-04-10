@@ -201,6 +201,102 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def decode_pcm_wave(path: Path) -> tuple[int, list[list[float]]]:
+    with wave.open(str(path), "rb") as wav_file:
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+        sample_rate = wav_file.getframerate()
+        num_frames = wav_file.getnframes()
+
+        frame_bytes = wav_file.readframes(num_frames)
+
+    samples = [[0.0 for _ in range(num_frames)] for _ in range(channels)]
+    for frame_index in range(num_frames):
+        frame_offset = frame_index * channels * sample_width
+        for channel in range(channels):
+            sample_offset = frame_offset + (channel * sample_width)
+
+            if sample_width == 2:
+                sample_int = struct.unpack_from("<h", frame_bytes, sample_offset)[0]
+                samples[channel][frame_index] = sample_int / 32768.0
+            elif sample_width == 3:
+                raw = frame_bytes[sample_offset : sample_offset + sample_width]
+                sample_int = int.from_bytes(raw, byteorder="little", signed=False)
+                if sample_int & 0x800000:
+                    sample_int -= 0x1000000
+                samples[channel][frame_index] = sample_int / 8388608.0
+            elif sample_width == 4:
+                sample_int = struct.unpack_from("<i", frame_bytes, sample_offset)[0]
+                samples[channel][frame_index] = sample_int / 2147483648.0
+            else:
+                raise SystemExit(
+                    f"error: unsupported PCM sample width {sample_width * 8}-bit at {path}"
+                )
+
+    return sample_rate, samples
+
+
+def find_first_frame_above_threshold(
+    samples: list[list[float]], threshold: float = 1.0 / 32768.0
+) -> int | None:
+    if not samples:
+        return None
+
+    frame_count = len(samples[0])
+    for frame_index in range(frame_count):
+        for channel_samples in samples:
+            if abs(channel_samples[frame_index]) >= threshold:
+                return frame_index
+    return None
+
+
+def write_pcm16_wave(path: Path, sample_rate: int, samples: list[list[float]]) -> None:
+    if not samples:
+        raise SystemExit("error: cannot write an empty WAV buffer")
+
+    channel_count = len(samples)
+    frame_count = len(samples[0])
+    for channel_samples in samples:
+        if len(channel_samples) != frame_count:
+            raise SystemExit("error: WAV channel lengths do not match")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(channel_count)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+
+        frames = bytearray()
+        for frame_index in range(frame_count):
+            for channel in range(channel_count):
+                clamped = max(-1.0, min(1.0, samples[channel][frame_index]))
+                frames.extend(struct.pack("<h", int(round(clamped * 32767.0))))
+        wav_file.writeframes(frames)
+
+
+def build_pure_predelay_reference(
+    input_path: Path,
+    output_path: Path,
+    output_channels: int,
+    delay_samples: int,
+) -> Path:
+    sample_rate, input_samples = decode_pcm_wave(input_path)
+    input_channels = len(input_samples)
+    frame_count = len(input_samples[0]) if input_samples else 0
+
+    reference_samples = [[0.0 for _ in range(frame_count)] for _ in range(output_channels)]
+    for channel in range(output_channels):
+        source_channel = min(channel, input_channels - 1)
+        source = input_samples[source_channel]
+        target = reference_samples[channel]
+
+        for frame_index in range(delay_samples, frame_count):
+            target[frame_index] = source[frame_index - delay_samples]
+
+    write_pcm16_wave(output_path, sample_rate, reference_samples)
+    return output_path
+
+
 def make_stereo_probe_wav(path: Path, sample_rate: int = 48000, duration_seconds: float = 1.0) -> Path:
     num_frames = int(round(sample_rate * duration_seconds))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,7 +325,13 @@ def make_stereo_probe_wav(path: Path, sample_rate: int = 48000, duration_seconds
     return path
 
 
-def evaluate_case(case_data: dict, metrics: dict, case_dir: Path, completed_cases: dict[str, dict]) -> dict:
+def evaluate_case(
+    case_data: dict,
+    metrics: dict,
+    case_dir: Path,
+    completed_cases: dict[str, dict],
+    extra_analysis: dict | None,
+) -> dict:
     case_id = case_data["id"]
     shell_verification = case_data.get("shellVerification", {})
     expectation = shell_verification.get("expectation")
@@ -268,20 +370,49 @@ def evaluate_case(case_data: dict, metrics: dict, case_dir: Path, completed_case
     elif expectation == "predelay_latency":
         expected_latency = shell_verification.get("expectedLatencySamples")
         tolerance = shell_verification.get("latencyToleranceSamples", 8)
-        detected_latency = metrics.get("detectedLatencySamples")
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
 
         if not isinstance(expected_latency, int):
             issues.append("predelay latency expectation is missing expectedLatencySamples")
-        elif not isinstance(detected_latency, (int, float)):
-            issues.append("predelay latency metrics are missing detectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay latency verification is missing wetOnsetSamples")
         else:
-            detected_latency = int(round(detected_latency))
-            if abs(detected_latency - expected_latency) > tolerance:
+            if abs(measured_onset - expected_latency) > tolerance:
                 issues.append(
-                    f"detected predelay latency {detected_latency} samples did not match expected {expected_latency} +/- {tolerance}"
+                    f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
                 )
         if metrics.get("wetPeakDbfs", -160.0) <= -40.0:
             issues.append("predelay wet output was unexpectedly close to silence")
+    elif expectation == "predelay_diffusion":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        minimum_delta_peak = shell_verification.get("minimumPurePredelayDeltaPeakDbfs", -80.0)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay diffusion expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay diffusion verification is missing wetOnsetSamples")
+        else:
+            if abs(measured_onset - expected_latency) > tolerance:
+                issues.append(
+                    f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+                )
+
+        if metrics.get("wetPeakDbfs", -160.0) <= -40.0:
+            issues.append("predelay diffusion wet output was unexpectedly close to silence")
+
+        if not isinstance(extra_analysis, dict):
+            issues.append("predelay diffusion comparison did not run")
+        else:
+            comparison_metrics = extra_analysis.get("comparisonMetrics", {})
+            delta_peak = comparison_metrics.get("deltaPeakDbfs")
+            if not isinstance(delta_peak, (int, float)):
+                issues.append("pure predelay comparison metrics are missing deltaPeakDbfs")
+            elif delta_peak <= minimum_delta_peak:
+                issues.append(
+                    f"diffused wet path stayed too close to a pure predelay copy (deltaPeakDbfs={delta_peak})"
+                )
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
 
@@ -394,7 +525,65 @@ def main() -> int:
             if analyze_result["exitCode"] == 0 and metrics_path.is_file():
                 metrics = load_json(metrics_path)
 
-        evaluation = evaluate_case(case_data, metrics, case_dir, completed_cases) if metrics else {
+        extra_analysis: dict | None = None
+        expectation = case_data.get("shellVerification", {}).get("expectation")
+        if metrics and expectation in {"predelay_latency", "predelay_diffusion"}:
+            _, wet_samples = decode_pcm_wave(wet_path)
+            wet_onset_samples = find_first_frame_above_threshold(wet_samples)
+
+            extra_analysis = {
+                "wetOnsetSamples": wet_onset_samples,
+                "wetOnsetThresholdLinear": 1.0 / 32768.0,
+            }
+
+            if expectation == "predelay_diffusion":
+                expected_latency = case_data["shellVerification"].get("expectedLatencySamples")
+                if not isinstance(expected_latency, int):
+                    raise SystemExit(
+                        f"error: predelay diffusion shell case {case_id} is missing expectedLatencySamples"
+                    )
+
+                pure_reference_dir = case_dir / "pure_predelay_reference"
+                pure_reference_path = build_pure_predelay_reference(
+                    input_path,
+                    pure_reference_dir / "pure_predelay_reference.wav",
+                    int(case_data.get("channels", 2)),
+                    expected_latency,
+                )
+                comparison_dir = case_dir / "pure_predelay_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(pure_reference_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "purePredelayReferencePath": str(pure_reference_path.resolve().as_posix()),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
+
+        evaluation = evaluate_case(case_data, metrics, case_dir, completed_cases, extra_analysis) if metrics else {
             "caseId": case_id,
             "expectation": case_data.get("shellVerification", {}).get("expectation"),
             "passed": False,
@@ -416,6 +605,7 @@ def main() -> int:
             "render": render_result,
             "analyze": analyze_result,
             "metrics": metrics,
+            "extraAnalysis": extra_analysis,
             "evaluation": evaluation,
             "notes": case_data.get("notes"),
         }
@@ -491,7 +681,7 @@ def main() -> int:
         "casesRoot": str(cases_root.as_posix()),
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
-            "The current shell remains conservative: the wet path is now a simple predelayed copy of routed input, not a reverb tail.",
+            "The current shell remains conservative: the wet path now runs through predelay first and then a very short fixed diffusion stage.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {

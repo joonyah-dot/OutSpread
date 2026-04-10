@@ -13,9 +13,10 @@
     "predelay": 0.12
   },
   "shellVerification": {
-    "expectation": "predelay_latency",
+    "expectation": "predelay_diffusion",
     "expectedLatencySamples": 2880,
-    "latencyToleranceSamples": 8
+    "latencyToleranceSamples": 8,
+    "minimumPurePredelayDeltaPeakDbfs": -80.0
   },
-  "notes": "Verifies that the current shell wet path now includes a real predelay stage. Mix is fully wet here so the delay is directly measurable against the dry impulse."
+  "notes": "Verifies that the current shell wet path includes real predelay followed by a short diffusion stage. Mix is fully wet here so the onset delay and the difference from a pure delayed copy are both reviewable."
 }

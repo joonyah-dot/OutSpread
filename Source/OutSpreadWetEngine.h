@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <JuceHeader.h>
 
 #include "OutSpreadParameters.h"
@@ -19,11 +21,15 @@ public:
 
 private:
     juce::AudioBuffer<float> wetBuffer;
-    juce::AudioBuffer<float> delayBuffer;
+    juce::AudioBuffer<float> predelayBuffer;
+    juce::AudioBuffer<float> diffusionBuffer;
     double currentSampleRate = 0.0;
     int currentOutputChannels = 0;
     int maximumBlockSize = 0;
-    int maximumDelaySamples = 0;
-    int writePosition = 0;
+    int maximumPredelaySamples = 0;
+    int maximumDiffusionSamples = 0;
+    int predelayWritePosition = 0;
+    int diffusionWritePosition = 0;
+    std::array<int, 4> diffusionTapSamples { 0, 0, 0, 0 };
 };
 } // namespace outspread
