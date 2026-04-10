@@ -13,10 +13,12 @@
     "predelay": 0.12
   },
   "shellVerification": {
-    "expectation": "predelay_diffusion",
+    "expectation": "predelay_recirculation",
     "expectedLatencySamples": 2880,
     "latencyToleranceSamples": 8,
-    "minimumPurePredelayDeltaPeakDbfs": -80.0
+    "minimumDiffusionOnlyDeltaPeakDbfs": -80.0,
+    "minimumExtraPersistenceSamples": 256,
+    "maximumPersistenceSamples": 2048
   },
-  "notes": "Verifies that the current shell wet path includes real predelay followed by a short diffusion stage. Mix is fully wet here so the onset delay and the difference from a pure delayed copy are both reviewable."
+  "notes": "Verifies that the current shell wet path includes real predelay, a short diffusion stage, and a tiny local recirculation block. Mix is fully wet here so the onset delay and the added early persistence beyond the diffusion-only reference are both reviewable."
 }

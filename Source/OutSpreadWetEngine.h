@@ -23,13 +23,17 @@ private:
     juce::AudioBuffer<float> wetBuffer;
     juce::AudioBuffer<float> predelayBuffer;
     juce::AudioBuffer<float> diffusionBuffer;
+    juce::AudioBuffer<float> localRecirculationBuffer;
     double currentSampleRate = 0.0;
     int currentOutputChannels = 0;
     int maximumBlockSize = 0;
     int maximumPredelaySamples = 0;
     int maximumDiffusionSamples = 0;
+    int maximumLocalRecirculationSamples = 0;
     int predelayWritePosition = 0;
     int diffusionWritePosition = 0;
+    int localRecirculationWritePosition = 0;
+    int localRecirculationDelaySamples = 0;
     std::array<int, 4> diffusionTapSamples { 0, 0, 0, 0 };
 };
 } // namespace outspread

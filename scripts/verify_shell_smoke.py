@@ -13,6 +13,9 @@ import wave
 from datetime import datetime
 from pathlib import Path
 
+DIFFUSION_TAP_MS = (0.0, 0.67, 1.41, 2.89)
+DIFFUSION_TAP_GAINS = (0.75, 0.18, -0.10, 0.07)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -250,6 +253,19 @@ def find_first_frame_above_threshold(
     return None
 
 
+def find_last_frame_above_threshold(
+    samples: list[list[float]], threshold: float = 1.0 / 32768.0
+) -> int | None:
+    if not samples:
+        return None
+
+    for frame_index in range(len(samples[0]) - 1, -1, -1):
+        for channel_samples in samples:
+            if abs(channel_samples[frame_index]) >= threshold:
+                return frame_index
+    return None
+
+
 def write_pcm16_wave(path: Path, sample_rate: int, samples: list[list[float]]) -> None:
     if not samples:
         raise SystemExit("error: cannot write an empty WAV buffer")
@@ -292,6 +308,41 @@ def build_pure_predelay_reference(
 
         for frame_index in range(delay_samples, frame_count):
             target[frame_index] = source[frame_index - delay_samples]
+
+    write_pcm16_wave(output_path, sample_rate, reference_samples)
+    return output_path
+
+
+def build_predelay_diffusion_reference(
+    input_path: Path,
+    output_path: Path,
+    output_channels: int,
+    delay_samples: int,
+) -> Path:
+    sample_rate, input_samples = decode_pcm_wave(input_path)
+    input_channels = len(input_samples)
+    frame_count = len(input_samples[0]) if input_samples else 0
+    diffusion_tap_samples = [
+        int(round((sample_rate * tap_ms) / 1000.0)) for tap_ms in DIFFUSION_TAP_MS
+    ]
+
+    reference_samples = [[0.0 for _ in range(frame_count)] for _ in range(output_channels)]
+    for channel in range(output_channels):
+        source_channel = min(channel, input_channels - 1)
+        source = input_samples[source_channel]
+        target = reference_samples[channel]
+
+        for frame_index in range(frame_count):
+            predelayed_index = frame_index - delay_samples
+            if predelayed_index < 0:
+                continue
+
+            sample_value = 0.0
+            for tap_samples, tap_gain in zip(diffusion_tap_samples, DIFFUSION_TAP_GAINS):
+                tap_index = predelayed_index - tap_samples
+                if tap_index >= 0:
+                    sample_value += source[tap_index] * tap_gain
+            target[frame_index] = sample_value
 
     write_pcm16_wave(output_path, sample_rate, reference_samples)
     return output_path
@@ -413,6 +464,54 @@ def evaluate_case(
                 issues.append(
                     f"diffused wet path stayed too close to a pure predelay copy (deltaPeakDbfs={delta_peak})"
                 )
+    elif expectation == "predelay_recirculation":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        minimum_delta_peak = shell_verification.get("minimumDiffusionOnlyDeltaPeakDbfs", -80.0)
+        minimum_extra_persistence = shell_verification.get("minimumExtraPersistenceSamples", 128)
+        maximum_persistence = shell_verification.get("maximumPersistenceSamples", 2048)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+        measured_last = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetLastAboveThresholdSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay recirculation expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay recirculation verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(measured_last, int) or not isinstance(measured_onset, int) or measured_last <= measured_onset:
+            issues.append("predelay recirculation wet output did not show a usable post-onset persistence window")
+
+        if not isinstance(extra_analysis, dict):
+            issues.append("predelay recirculation comparison did not run")
+        else:
+            comparison_metrics = extra_analysis.get("comparisonMetrics", {})
+            delta_peak = comparison_metrics.get("deltaPeakDbfs")
+            if not isinstance(delta_peak, (int, float)):
+                issues.append("diffusion-only comparison metrics are missing deltaPeakDbfs")
+            elif delta_peak <= minimum_delta_peak:
+                issues.append(
+                    f"recirculating wet path stayed too close to the diffusion-only reference (deltaPeakDbfs={delta_peak})"
+                )
+
+            extra_persistence = extra_analysis.get("extraPersistenceSamples")
+            if not isinstance(extra_persistence, int):
+                issues.append("predelay recirculation verification is missing extraPersistenceSamples")
+            elif extra_persistence < minimum_extra_persistence:
+                issues.append(
+                    f"recirculating wet path only extended persistence by {extra_persistence} samples"
+                )
+
+            persistence_samples = extra_analysis.get("wetPersistenceSamples")
+            if not isinstance(persistence_samples, int):
+                issues.append("predelay recirculation verification is missing wetPersistenceSamples")
+            elif persistence_samples > maximum_persistence:
+                issues.append(
+                    f"recirculating wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
+                )
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
 
@@ -527,12 +626,14 @@ def main() -> int:
 
         extra_analysis: dict | None = None
         expectation = case_data.get("shellVerification", {}).get("expectation")
-        if metrics and expectation in {"predelay_latency", "predelay_diffusion"}:
+        if metrics and expectation in {"predelay_latency", "predelay_diffusion", "predelay_recirculation"}:
             _, wet_samples = decode_pcm_wave(wet_path)
             wet_onset_samples = find_first_frame_above_threshold(wet_samples)
+            wet_last_samples = find_last_frame_above_threshold(wet_samples)
 
             extra_analysis = {
                 "wetOnsetSamples": wet_onset_samples,
+                "wetLastAboveThresholdSamples": wet_last_samples,
                 "wetOnsetThresholdLinear": 1.0 / 32768.0,
             }
 
@@ -577,6 +678,64 @@ def main() -> int:
                 extra_analysis.update(
                     {
                         "purePredelayReferencePath": str(pure_reference_path.resolve().as_posix()),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
+            elif expectation == "predelay_recirculation":
+                expected_latency = case_data["shellVerification"].get("expectedLatencySamples")
+                if not isinstance(expected_latency, int):
+                    raise SystemExit(
+                        f"error: predelay recirculation shell case {case_id} is missing expectedLatencySamples"
+                    )
+
+                diffusion_reference_dir = case_dir / "diffusion_only_reference"
+                diffusion_reference_path = build_predelay_diffusion_reference(
+                    input_path,
+                    diffusion_reference_dir / "diffusion_only_reference.wav",
+                    int(case_data.get("channels", 2)),
+                    expected_latency,
+                )
+                _, diffusion_reference_samples = decode_pcm_wave(diffusion_reference_path)
+                diffusion_last_samples = find_last_frame_above_threshold(diffusion_reference_samples)
+                extra_persistence = None
+                persistence_samples = None
+                if isinstance(wet_last_samples, int) and isinstance(diffusion_last_samples, int):
+                    extra_persistence = wet_last_samples - diffusion_last_samples
+                if isinstance(wet_last_samples, int) and isinstance(wet_onset_samples, int):
+                    persistence_samples = wet_last_samples - wet_onset_samples
+
+                comparison_dir = case_dir / "diffusion_only_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(diffusion_reference_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "diffusionOnlyReferencePath": str(diffusion_reference_path.resolve().as_posix()),
+                        "diffusionOnlyLastAboveThresholdSamples": diffusion_last_samples,
+                        "extraPersistenceSamples": extra_persistence,
+                        "wetPersistenceSamples": persistence_samples,
                         "comparisonResult": comparison_result,
                         "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
                         "comparisonMetrics": comparison_metrics,
@@ -681,7 +840,7 @@ def main() -> int:
         "casesRoot": str(cases_root.as_posix()),
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
-            "The current shell remains conservative: the wet path now runs through predelay first and then a very short fixed diffusion stage.",
+            "The current shell remains conservative: the wet path now runs through predelay, a very short fixed diffusion stage, and a tiny local recirculation block.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {
