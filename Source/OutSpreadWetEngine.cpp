@@ -6,6 +6,11 @@ constexpr std::array<float, 4> diffusionTapMs { 0.0f, 0.67f, 1.41f, 2.89f };
 constexpr std::array<float, 4> diffusionTapGains { 0.75f, 0.18f, -0.10f, 0.07f };
 constexpr float localRecirculationDelayMs = 4.5f;
 constexpr float localRecirculationGain = 0.25f;
+constexpr std::array<float, 4> secondaryDiffusionTapMs { 0.0f, 0.91f, 1.87f, 3.73f };
+constexpr std::array<float, 4> secondaryDiffusionTapGains { 0.58f, -0.16f, 0.09f, 0.05f };
+constexpr std::array<float, 2> secondaryLocalRecirculationDelayMs { 5.3f, 6.1f };
+constexpr float secondaryLocalRecirculationGain = 0.18f;
+constexpr float secondaryBranchMix = 0.35f;
 
 float interpolateLinear (float startValue, float endValue, int index, int numSamples)
 {
@@ -58,11 +63,32 @@ void WetEngine::prepare (double sampleRate, int maximumBlockSizeToPrepare, int o
     localRecirculationDelaySamples = static_cast<int> (
         std::round ((sampleRate * static_cast<double> (localRecirculationDelayMs)) / 1000.0)
     );
+    const auto longestSecondaryDiffusionTapMs = secondaryDiffusionTapMs.back();
+    maximumSecondaryDiffusionSamples = static_cast<int> (
+        std::ceil ((sampleRate * longestSecondaryDiffusionTapMs) / 1000.0)
+    ) + 1;
+    const auto longestSecondaryLocalRecirculationDelayMs = std::max (
+        secondaryLocalRecirculationDelayMs[0],
+        secondaryLocalRecirculationDelayMs[1]
+    );
+    maximumSecondaryLocalRecirculationSamples = static_cast<int> (
+        std::ceil ((sampleRate * longestSecondaryLocalRecirculationDelayMs) / 1000.0)
+    ) + 1;
 
     for (size_t index = 0; index < diffusionTapMs.size(); ++index)
     {
         diffusionTapSamples[index] = static_cast<int> (
             std::round ((sampleRate * static_cast<double> (diffusionTapMs[index])) / 1000.0)
+        );
+        secondaryDiffusionTapSamples[index] = static_cast<int> (
+            std::round ((sampleRate * static_cast<double> (secondaryDiffusionTapMs[index])) / 1000.0)
+        );
+    }
+
+    for (size_t index = 0; index < secondaryLocalRecirculationDelayMs.size(); ++index)
+    {
+        secondaryLocalRecirculationDelaySamples[index] = static_cast<int> (
+            std::round ((sampleRate * static_cast<double> (secondaryLocalRecirculationDelayMs[index])) / 1000.0)
         );
     }
 
@@ -70,13 +96,19 @@ void WetEngine::prepare (double sampleRate, int maximumBlockSizeToPrepare, int o
     predelayBuffer.setSize (outputChannels, maximumPredelaySamples, false, false, true);
     diffusionBuffer.setSize (outputChannels, maximumDiffusionSamples, false, false, true);
     localRecirculationBuffer.setSize (outputChannels, maximumLocalRecirculationSamples, false, false, true);
+    secondaryDiffusionBuffer.setSize (outputChannels, maximumSecondaryDiffusionSamples, false, false, true);
+    secondaryLocalRecirculationBuffer.setSize (outputChannels, maximumSecondaryLocalRecirculationSamples, false, false, true);
     wetBuffer.clear();
     predelayBuffer.clear();
     diffusionBuffer.clear();
     localRecirculationBuffer.clear();
+    secondaryDiffusionBuffer.clear();
+    secondaryLocalRecirculationBuffer.clear();
     predelayWritePosition = 0;
     diffusionWritePosition = 0;
     localRecirculationWritePosition = 0;
+    secondaryDiffusionWritePosition = 0;
+    secondaryLocalRecirculationWritePosition = 0;
 }
 
 void WetEngine::releaseResources()
@@ -85,17 +117,25 @@ void WetEngine::releaseResources()
     predelayBuffer.setSize (0, 0);
     diffusionBuffer.setSize (0, 0);
     localRecirculationBuffer.setSize (0, 0);
+    secondaryDiffusionBuffer.setSize (0, 0);
+    secondaryLocalRecirculationBuffer.setSize (0, 0);
     currentSampleRate = 0.0;
     currentOutputChannels = 0;
     maximumBlockSize = 0;
     maximumPredelaySamples = 0;
     maximumDiffusionSamples = 0;
     maximumLocalRecirculationSamples = 0;
+    maximumSecondaryDiffusionSamples = 0;
+    maximumSecondaryLocalRecirculationSamples = 0;
     predelayWritePosition = 0;
     diffusionWritePosition = 0;
     localRecirculationWritePosition = 0;
+    secondaryDiffusionWritePosition = 0;
+    secondaryLocalRecirculationWritePosition = 0;
     localRecirculationDelaySamples = 0;
     diffusionTapSamples = { 0, 0, 0, 0 };
+    secondaryDiffusionTapSamples = { 0, 0, 0, 0 };
+    secondaryLocalRecirculationDelaySamples = { 0, 0 };
 }
 
 void WetEngine::reset()
@@ -104,9 +144,13 @@ void WetEngine::reset()
     predelayBuffer.clear();
     diffusionBuffer.clear();
     localRecirculationBuffer.clear();
+    secondaryDiffusionBuffer.clear();
+    secondaryLocalRecirculationBuffer.clear();
     predelayWritePosition = 0;
     diffusionWritePosition = 0;
     localRecirculationWritePosition = 0;
+    secondaryDiffusionWritePosition = 0;
+    secondaryLocalRecirculationWritePosition = 0;
 }
 
 void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const ParameterSnapshot& parameters)
@@ -117,9 +161,12 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
     const auto predelayBufferLength = predelayBuffer.getNumSamples();
     const auto diffusionBufferLength = diffusionBuffer.getNumSamples();
     const auto localRecirculationBufferLength = localRecirculationBuffer.getNumSamples();
+    const auto secondaryDiffusionBufferLength = secondaryDiffusionBuffer.getNumSamples();
+    const auto secondaryLocalRecirculationBufferLength = secondaryLocalRecirculationBuffer.getNumSamples();
 
     if (numSamples <= 0 || numInputChannels <= 0
-        || predelayBufferLength <= 0 || diffusionBufferLength <= 0 || localRecirculationBufferLength <= 0)
+        || predelayBufferLength <= 0 || diffusionBufferLength <= 0 || localRecirculationBufferLength <= 0
+        || secondaryDiffusionBufferLength <= 0 || secondaryLocalRecirculationBufferLength <= 0)
         return;
 
     if (wetBuffer.getNumChannels() != outputChannels || wetBuffer.getNumSamples() < numSamples)
@@ -133,6 +180,12 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
 
     if (localRecirculationBuffer.getNumChannels() != outputChannels)
         localRecirculationBuffer.setSize (outputChannels, localRecirculationBufferLength, false, false, true);
+
+    if (secondaryDiffusionBuffer.getNumChannels() != outputChannels)
+        secondaryDiffusionBuffer.setSize (outputChannels, secondaryDiffusionBufferLength, false, false, true);
+
+    if (secondaryLocalRecirculationBuffer.getNumChannels() != outputChannels)
+        secondaryLocalRecirculationBuffer.setSize (outputChannels, secondaryLocalRecirculationBufferLength, false, false, true);
 
     wetBuffer.clear();
 
@@ -163,14 +216,18 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
             auto* predelayChannel = predelayBuffer.getWritePointer (channel);
             auto* diffusionChannel = diffusionBuffer.getWritePointer (channel);
             auto* localRecirculationChannel = localRecirculationBuffer.getWritePointer (channel);
+            auto* secondaryDiffusionChannel = secondaryDiffusionBuffer.getWritePointer (channel);
+            auto* secondaryLocalRecirculationChannel = secondaryLocalRecirculationBuffer.getWritePointer (channel);
 
             predelayChannel[predelayWritePosition] = inputSample;
 
             const auto predelayReadPosition = static_cast<float> (predelayWritePosition) - delaySamples;
             const auto predelayedSample = readDelayedSample (predelayChannel, predelayBufferLength, predelayReadPosition);
             diffusionChannel[diffusionWritePosition] = predelayedSample;
+            secondaryDiffusionChannel[secondaryDiffusionWritePosition] = predelayedSample;
 
             auto diffusedSample = predelayedSample;
+            auto secondaryDiffusedSample = predelayedSample;
             if (delaySamples >= 1.0f)
             {
                 diffusedSample = 0.0f;
@@ -180,9 +237,22 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                     diffusedSample += diffusionTapGains[tapIndex]
                         * readDelayedSample (diffusionChannel, diffusionBufferLength, tapReadPosition);
                 }
+
+                secondaryDiffusedSample = 0.0f;
+                for (size_t tapIndex = 0; tapIndex < secondaryDiffusionTapGains.size(); ++tapIndex)
+                {
+                    const auto secondaryTapReadPosition =
+                        static_cast<float> (secondaryDiffusionWritePosition - secondaryDiffusionTapSamples[tapIndex]);
+                    secondaryDiffusedSample += secondaryDiffusionTapGains[tapIndex]
+                        * readDelayedSample (
+                            secondaryDiffusionChannel,
+                            secondaryDiffusionBufferLength,
+                            secondaryTapReadPosition
+                        );
+                }
             }
 
-            auto wetSample = diffusedSample;
+            auto primaryBranchSample = diffusedSample;
             if (delaySamples >= 1.0f && localRecirculationDelaySamples > 0)
             {
                 const auto localRecirculationReadPosition =
@@ -192,16 +262,43 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                     localRecirculationBufferLength,
                     localRecirculationReadPosition
                 );
-                wetSample += localRecirculationSample * localRecirculationGain;
+                primaryBranchSample += localRecirculationSample * localRecirculationGain;
             }
 
-            localRecirculationChannel[localRecirculationWritePosition] = wetSample;
+            auto secondaryBranchSample = secondaryDiffusedSample;
+            if (delaySamples >= 1.0f)
+            {
+                const auto secondaryDelayIndex = std::min (channel, static_cast<int> (secondaryLocalRecirculationDelaySamples.size()) - 1);
+                const auto secondaryRecirculationDelaySamples = secondaryLocalRecirculationDelaySamples[secondaryDelayIndex];
+                if (secondaryRecirculationDelaySamples > 0)
+                {
+                    const auto secondaryLocalRecirculationReadPosition =
+                        static_cast<float> (secondaryLocalRecirculationWritePosition - secondaryRecirculationDelaySamples);
+                    const auto secondaryLocalRecirculationSample = readDelayedSample (
+                        secondaryLocalRecirculationChannel,
+                        secondaryLocalRecirculationBufferLength,
+                        secondaryLocalRecirculationReadPosition
+                    );
+                    secondaryBranchSample += secondaryLocalRecirculationSample * secondaryLocalRecirculationGain;
+                }
+            }
+
+            localRecirculationChannel[localRecirculationWritePosition] = primaryBranchSample;
+            secondaryLocalRecirculationChannel[secondaryLocalRecirculationWritePosition] = secondaryBranchSample;
+
+            auto wetSample = primaryBranchSample;
+            if (delaySamples >= 1.0f)
+                wetSample += secondaryBranchSample * secondaryBranchMix;
+
             wetBuffer.setSample (channel, sample, wetSample * wetGain);
         }
 
         predelayWritePosition = (predelayWritePosition + 1) % predelayBufferLength;
         diffusionWritePosition = (diffusionWritePosition + 1) % diffusionBufferLength;
         localRecirculationWritePosition = (localRecirculationWritePosition + 1) % localRecirculationBufferLength;
+        secondaryDiffusionWritePosition = (secondaryDiffusionWritePosition + 1) % secondaryDiffusionBufferLength;
+        secondaryLocalRecirculationWritePosition =
+            (secondaryLocalRecirculationWritePosition + 1) % secondaryLocalRecirculationBufferLength;
     }
 
     if (parameters.kill)
@@ -209,14 +306,18 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
         predelayBuffer.clear();
         diffusionBuffer.clear();
         localRecirculationBuffer.clear();
+        secondaryDiffusionBuffer.clear();
+        secondaryLocalRecirculationBuffer.clear();
         predelayWritePosition = 0;
         diffusionWritePosition = 0;
         localRecirculationWritePosition = 0;
+        secondaryDiffusionWritePosition = 0;
+        secondaryLocalRecirculationWritePosition = 0;
     }
 
     juce::ignoreUnused (parameters.feedbackNormalizedSmoothed);
-    // The shell wet engine now runs routed input through predelay, a very short fixed diffusion
-    // stage, and then a tiny local recirculating block. The recirculation amount is intentionally
-    // fixed and conservative so this stays finite and does not behave like a full reverberator.
+    // The shell wet engine now runs routed input through predelay and then a tiny two-branch early
+    // structure. Both branches stay fixed, short, and local so the shell gains some extra density
+    // and decorrelation without behaving like a full reverberator.
 }
 } // namespace outspread
