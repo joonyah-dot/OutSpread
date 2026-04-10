@@ -1,24 +1,13 @@
 #pragma once
 #include <JuceHeader.h>
 
+#include "OutSpreadParameters.h"
+#include "OutSpreadWetEngine.h"
+
 class OutSpreadAudioProcessor : public juce::AudioProcessor
 {
 public:
-    struct ParameterSnapshot
-    {
-        float mix = 0.0f;
-        float size = 50.0f;
-        float gravity = 0.0f;
-        float feedback = 50.0f;
-        float predelayMs = 0.0f;
-        float lowTone = 0.0f;
-        float highTone = 0.0f;
-        float resonance = 0.0f;
-        float modDepth = 0.0f;
-        float modRateHz = 1.0f;
-        bool freezeInfinite = false;
-        bool kill = false;
-    };
+    using ParameterSnapshot = outspread::ParameterSnapshot;
 
     OutSpreadAudioProcessor();
     ~OutSpreadAudioProcessor() override = default;
@@ -51,35 +40,14 @@ public:
     ParameterSnapshot getParameterSnapshot() const noexcept;
 
 private:
-    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    static std::unique_ptr<juce::RangedAudioParameter> createFloatParameter (
-        const juce::String& parameterId,
-        const juce::String& name,
-        juce::NormalisableRange<float> range,
-        float defaultValue);
-
-    void initializeParameterPointers();
     void prepareRoutedInput (juce::AudioBuffer<float>& buffer, int numSamples);
-    void populateWetBufferFromShellInput();
+    void applyDryWetMix (juce::AudioBuffer<float>& buffer, const ParameterSnapshot& snapshot);
 
     juce::AudioProcessorValueTreeState parameters;
-
-    std::atomic<float>* mixParameter = nullptr;
-    std::atomic<float>* sizeParameter = nullptr;
-    std::atomic<float>* gravityParameter = nullptr;
-    std::atomic<float>* feedbackParameter = nullptr;
-    std::atomic<float>* predelayParameter = nullptr;
-    std::atomic<float>* lowToneParameter = nullptr;
-    std::atomic<float>* highToneParameter = nullptr;
-    std::atomic<float>* resonanceParameter = nullptr;
-    std::atomic<float>* modDepthParameter = nullptr;
-    std::atomic<float>* modRateParameter = nullptr;
-    std::atomic<float>* freezeInfiniteParameter = nullptr;
-    std::atomic<float>* killParameter = nullptr;
+    outspread::ParameterState parameterState;
+    outspread::WetEngine wetEngine;
 
     juce::AudioBuffer<float> routedInputBuffer;
-    juce::AudioBuffer<float> wetBuffer;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mixSmoothed;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutSpreadAudioProcessor)
 };

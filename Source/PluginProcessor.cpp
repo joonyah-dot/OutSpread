@@ -3,42 +3,36 @@
 
 namespace
 {
-constexpr auto stateTreeId = "outspread_state";
-constexpr auto mixId = "mix";
-constexpr auto sizeId = "size";
-constexpr auto gravityId = "gravity";
-constexpr auto feedbackId = "feedback";
-constexpr auto predelayId = "predelay";
-constexpr auto lowToneId = "low_tone";
-constexpr auto highToneId = "high_tone";
-constexpr auto resonanceId = "resonance";
-constexpr auto modDepthId = "mod_depth";
-constexpr auto modRateId = "mod_rate";
-constexpr auto freezeInfiniteId = "freeze_infinite";
-constexpr auto killId = "kill";
+float interpolateLinear (float startValue, float endValue, int index, int numSamples)
+{
+    if (numSamples <= 1)
+        return endValue;
+
+    const auto proportion = static_cast<float> (index) / static_cast<float> (numSamples - 1);
+    return startValue + ((endValue - startValue) * proportion);
+}
 } // namespace
 
 OutSpreadAudioProcessor::OutSpreadAudioProcessor()
     : AudioProcessor (BusesProperties()
         .withInput ("Input", juce::AudioChannelSet::stereo(), true)
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this, nullptr, stateTreeId, createParameterLayout())
+      parameters (*this, nullptr, outspread::stateTreeId, outspread::createParameterLayout()),
+      parameterState (parameters)
 {
-    initializeParameterPointers();
 }
 
 void OutSpreadAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     routedInputBuffer.setSize (2, samplesPerBlock, false, false, true);
-    wetBuffer.setSize (2, samplesPerBlock, false, false, true);
-    mixSmoothed.reset (sampleRate, 0.02);
-    mixSmoothed.setCurrentAndTargetValue (juce::jlimit (0.0f, 1.0f, getParameterSnapshot().mix / 100.0f));
+    parameterState.prepare (sampleRate);
+    wetEngine.prepare (sampleRate, samplesPerBlock, 2);
 }
 
 void OutSpreadAudioProcessor::releaseResources()
 {
     routedInputBuffer.setSize (0, 0);
-    wetBuffer.setSize (0, 0);
+    wetEngine.releaseResources();
 }
 
 bool OutSpreadAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -69,29 +63,12 @@ void OutSpreadAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         buffer.clear (channel, 0, numSamples);
 
     routedInputBuffer.setSize (2, numSamples, false, false, true);
-    wetBuffer.setSize (2, numSamples, false, false, true);
 
     prepareRoutedInput (buffer, numSamples);
-    populateWetBufferFromShellInput();
 
-    const auto snapshot = getParameterSnapshot();
-    mixSmoothed.setTargetValue (juce::jlimit (0.0f, 1.0f, snapshot.mix / 100.0f));
-
-    if (snapshot.kill)
-        wetBuffer.clear();
-
-    for (auto sample = 0; sample < numSamples; ++sample)
-    {
-        const auto wetMix = mixSmoothed.getNextValue();
-        const auto dryMix = 1.0f - wetMix;
-
-        for (auto channel = 0; channel < 2; ++channel)
-        {
-            const auto drySample = routedInputBuffer.getSample (channel, sample);
-            const auto wetSample = wetBuffer.getSample (channel, sample);
-            buffer.setSample (channel, sample, (drySample * dryMix) + (wetSample * wetMix));
-        }
-    }
+    const auto snapshot = parameterState.capture (numSamples);
+    wetEngine.process (routedInputBuffer, snapshot);
+    applyDryWetMix (buffer, snapshot);
 }
 
 juce::AudioProcessorEditor* OutSpreadAudioProcessor::createEditor()
@@ -113,75 +90,13 @@ void OutSpreadAudioProcessor::setStateInformation (const void* data, int sizeInB
             parameters.replaceState (juce::ValueTree::fromXml (*stateXml));
     }
 
-    mixSmoothed.setCurrentAndTargetValue (juce::jlimit (0.0f, 1.0f, getParameterSnapshot().mix / 100.0f));
+    parameterState.reset();
+    wetEngine.reset();
 }
 
 OutSpreadAudioProcessor::ParameterSnapshot OutSpreadAudioProcessor::getParameterSnapshot() const noexcept
 {
-    auto load = [] (const std::atomic<float>* parameter, float fallback) noexcept
-    {
-        return parameter != nullptr ? parameter->load() : fallback;
-    };
-
-    ParameterSnapshot snapshot;
-    snapshot.mix = load (mixParameter, snapshot.mix);
-    snapshot.size = load (sizeParameter, snapshot.size);
-    snapshot.gravity = load (gravityParameter, snapshot.gravity);
-    snapshot.feedback = load (feedbackParameter, snapshot.feedback);
-    snapshot.predelayMs = load (predelayParameter, snapshot.predelayMs);
-    snapshot.lowTone = load (lowToneParameter, snapshot.lowTone);
-    snapshot.highTone = load (highToneParameter, snapshot.highTone);
-    snapshot.resonance = load (resonanceParameter, snapshot.resonance);
-    snapshot.modDepth = load (modDepthParameter, snapshot.modDepth);
-    snapshot.modRateHz = load (modRateParameter, snapshot.modRateHz);
-    snapshot.freezeInfinite = load (freezeInfiniteParameter, 0.0f) >= 0.5f;
-    snapshot.kill = load (killParameter, 0.0f) >= 0.5f;
-    return snapshot;
-}
-
-juce::AudioProcessorValueTreeState::ParameterLayout OutSpreadAudioProcessor::createParameterLayout()
-{
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-
-    layout.add (createFloatParameter (mixId, "Mix", { 0.0f, 100.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (sizeId, "Size", { 0.0f, 100.0f, 0.01f }, 50.0f));
-    layout.add (createFloatParameter (gravityId, "Gravity", { -100.0f, 100.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (feedbackId, "Feedback", { 0.0f, 100.0f, 0.01f }, 50.0f));
-    layout.add (createFloatParameter (predelayId, "Predelay", { 0.0f, 500.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (lowToneId, "Low Tone", { -100.0f, 100.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (highToneId, "High Tone", { -100.0f, 100.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (resonanceId, "Resonance", { 0.0f, 100.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (modDepthId, "Mod Depth", { 0.0f, 100.0f, 0.01f }, 0.0f));
-    layout.add (createFloatParameter (modRateId, "Mod Rate", { 0.05f, 10.0f, 0.01f }, 1.0f));
-    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { freezeInfiniteId, 1 }, "Freeze / Infinite", false));
-    layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { killId, 1 }, "Kill", false));
-
-    return layout;
-}
-
-std::unique_ptr<juce::RangedAudioParameter> OutSpreadAudioProcessor::createFloatParameter (
-    const juce::String& parameterId,
-    const juce::String& name,
-    juce::NormalisableRange<float> range,
-    float defaultValue)
-{
-    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { parameterId, 1 }, name, range, defaultValue);
-}
-
-void OutSpreadAudioProcessor::initializeParameterPointers()
-{
-    mixParameter = parameters.getRawParameterValue (mixId);
-    sizeParameter = parameters.getRawParameterValue (sizeId);
-    gravityParameter = parameters.getRawParameterValue (gravityId);
-    feedbackParameter = parameters.getRawParameterValue (feedbackId);
-    predelayParameter = parameters.getRawParameterValue (predelayId);
-    lowToneParameter = parameters.getRawParameterValue (lowToneId);
-    highToneParameter = parameters.getRawParameterValue (highToneId);
-    resonanceParameter = parameters.getRawParameterValue (resonanceId);
-    modDepthParameter = parameters.getRawParameterValue (modDepthId);
-    modRateParameter = parameters.getRawParameterValue (modRateId);
-    freezeInfiniteParameter = parameters.getRawParameterValue (freezeInfiniteId);
-    killParameter = parameters.getRawParameterValue (killId);
+    return parameterState.readCurrentValues();
 }
 
 void OutSpreadAudioProcessor::prepareRoutedInput (juce::AudioBuffer<float>& buffer, int numSamples)
@@ -208,10 +123,21 @@ void OutSpreadAudioProcessor::prepareRoutedInput (juce::AudioBuffer<float>& buff
     juce::FloatVectorOperations::copy (rightOutput, rightInput, numSamples);
 }
 
-void OutSpreadAudioProcessor::populateWetBufferFromShellInput()
+void OutSpreadAudioProcessor::applyDryWetMix (juce::AudioBuffer<float>& buffer, const ParameterSnapshot& snapshot)
 {
-    wetBuffer.makeCopyOf (routedInputBuffer, true);
+    const auto& wetBuffer = wetEngine.getWetBuffer();
+    const auto numSamples = buffer.getNumSamples();
 
-    // The shell intentionally mirrors routed input into the wet path so later DSP tickets
-    // can replace this population step without first undoing placeholder ambience code.
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const auto wetMix = interpolateLinear (snapshot.mixWetStart, snapshot.mixWetEnd, sample, numSamples);
+        const auto dryMix = 1.0f - wetMix;
+
+        for (int channel = 0; channel < 2; ++channel)
+        {
+            const auto drySample = routedInputBuffer.getSample (channel, sample);
+            const auto wetSample = wetBuffer.getSample (channel, sample);
+            buffer.setSample (channel, sample, (drySample * dryMix) + (wetSample * wetMix));
+        }
+    }
 }

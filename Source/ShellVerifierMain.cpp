@@ -1,5 +1,6 @@
 #include <JuceHeader.h>
 
+#include "OutSpreadParameters.h"
 #include "PluginProcessor.h"
 
 namespace
@@ -265,21 +266,21 @@ juce::var buildStateRoundtripResult()
     };
 
     static constexpr FloatTarget floatTargets[] {
-        { "mix", 100.0f },
-        { "size", 82.5f },
-        { "gravity", -37.0f },
-        { "feedback", 61.0f },
-        { "predelay", 123.0f },
-        { "low_tone", -25.0f },
-        { "high_tone", 40.0f },
-        { "resonance", 33.0f },
-        { "mod_depth", 27.0f },
-        { "mod_rate", 3.25f },
+        { outspread::parameter_ids::mix, 100.0f },
+        { outspread::parameter_ids::size, 82.5f },
+        { outspread::parameter_ids::gravity, -37.0f },
+        { outspread::parameter_ids::feedback, 61.0f },
+        { outspread::parameter_ids::predelay, 123.0f },
+        { outspread::parameter_ids::lowTone, -25.0f },
+        { outspread::parameter_ids::highTone, 40.0f },
+        { outspread::parameter_ids::resonance, 33.0f },
+        { outspread::parameter_ids::modDepth, 27.0f },
+        { outspread::parameter_ids::modRate, 3.25f },
     };
 
     static constexpr FloatTarget boolTargets[] {
-        { "freeze_infinite", 1.0f },
-        { "kill", 1.0f },
+        { outspread::parameter_ids::freezeInfinite, 1.0f },
+        { outspread::parameter_ids::kill, 1.0f },
     };
 
     OutSpreadAudioProcessor sourceProcessor;

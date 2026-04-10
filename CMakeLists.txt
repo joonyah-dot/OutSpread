@@ -14,7 +14,7 @@ endif()
 
 juce_add_plugin(
     OutSpread
-    COMPANY_NAME "YourCompanyOrName"
+    COMPANY_NAME "KyleAudio"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -37,6 +37,10 @@ target_compile_definitions(
 target_sources(
     OutSpread
     PRIVATE
+    Source/OutSpreadParameters.cpp
+    Source/OutSpreadParameters.h
+    Source/OutSpreadWetEngine.cpp
+    Source/OutSpreadWetEngine.h
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
     Source/PluginEditor.cpp
@@ -70,6 +74,10 @@ juce_generate_juce_header(OutSpreadShellVerifier)
 target_sources(
     OutSpreadShellVerifier
     PRIVATE
+    Source/OutSpreadParameters.cpp
+    Source/OutSpreadParameters.h
+    Source/OutSpreadWetEngine.cpp
+    Source/OutSpreadWetEngine.h
     Source/ShellVerifierMain.cpp
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
