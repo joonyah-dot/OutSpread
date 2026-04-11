@@ -5,16 +5,20 @@ namespace
 constexpr std::array<float, 4> diffusionTapMs { 0.0f, 0.67f, 1.41f, 2.89f };
 constexpr std::array<float, 4> diffusionTapGains { 0.75f, 0.18f, -0.10f, 0.07f };
 constexpr float localRecirculationDelayMs = 4.5f;
-constexpr float localRecirculationGain = 0.25f;
+constexpr float minimumLocalRecirculationGain = 0.12f;
+constexpr float maximumLocalRecirculationGain = 0.38f;
 constexpr std::array<float, 4> secondaryDiffusionTapMs { 0.0f, 0.91f, 1.87f, 3.73f };
 constexpr std::array<float, 4> secondaryDiffusionTapGains { 0.58f, -0.16f, 0.09f, 0.05f };
 constexpr std::array<float, 2> secondaryLocalRecirculationDelayMs { 5.3f, 6.1f };
-constexpr float secondaryLocalRecirculationGain = 0.18f;
+constexpr float minimumSecondaryLocalRecirculationGain = 0.08f;
+constexpr float maximumSecondaryLocalRecirculationGain = 0.28f;
 constexpr float secondaryBranchMix = 0.35f;
 constexpr std::array<float, 2> primaryCrossCouplingDelayMs { 2.6f, 3.2f };
 constexpr std::array<float, 2> secondaryCrossCouplingDelayMs { 3.4f, 2.4f };
-constexpr float primaryCrossCouplingGain = 0.08f;
-constexpr float secondaryCrossCouplingGain = 0.06f;
+constexpr float minimumPrimaryCrossCouplingGain = 0.03f;
+constexpr float maximumPrimaryCrossCouplingGain = 0.13f;
+constexpr float minimumSecondaryCrossCouplingGain = 0.02f;
+constexpr float maximumSecondaryCrossCouplingGain = 0.10f;
 
 float interpolateLinear (float startValue, float endValue, int index, int numSamples)
 {
@@ -44,6 +48,11 @@ float readDelayedSample (const float* delayChannelData, int delayBufferLength, f
     const auto fraction = wrappedPosition - static_cast<float> (indexA);
 
     return juce::jmap (fraction, delayChannelData[indexA], delayChannelData[indexB]);
+}
+
+float mapFeedbackGain (float normalizedFeedback, float minimumGain, float maximumGain)
+{
+    return juce::jmap (juce::jlimit (0.0f, 1.0f, normalizedFeedback), minimumGain, maximumGain);
 }
 } // namespace
 
@@ -220,6 +229,32 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
             sample,
             numSamples
         );
+        const auto normalizedFeedback = interpolateLinear (
+            parameters.feedbackNormalizedStart,
+            parameters.feedbackNormalizedEnd,
+            sample,
+            numSamples
+        );
+        const auto primaryRecirculationGain = mapFeedbackGain (
+            normalizedFeedback,
+            minimumLocalRecirculationGain,
+            maximumLocalRecirculationGain
+        );
+        const auto secondaryRecirculationGain = mapFeedbackGain (
+            normalizedFeedback,
+            minimumSecondaryLocalRecirculationGain,
+            maximumSecondaryLocalRecirculationGain
+        );
+        const auto primaryCouplingGain = mapFeedbackGain (
+            normalizedFeedback,
+            minimumPrimaryCrossCouplingGain,
+            maximumPrimaryCrossCouplingGain
+        );
+        const auto secondaryCouplingGain = mapFeedbackGain (
+            normalizedFeedback,
+            minimumSecondaryCrossCouplingGain,
+            maximumSecondaryCrossCouplingGain
+        );
 
         for (int channel = 0; channel < outputChannels; ++channel)
         {
@@ -274,7 +309,7 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                     localRecirculationBufferLength,
                     localRecirculationReadPosition
                 );
-                primaryBranchSample += localRecirculationSample * localRecirculationGain;
+                primaryBranchSample += localRecirculationSample * primaryRecirculationGain;
             }
 
             auto secondaryBranchSample = secondaryDiffusedSample;
@@ -291,7 +326,7 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                         secondaryLocalRecirculationBufferLength,
                         secondaryLocalRecirculationReadPosition
                     );
-                    secondaryBranchSample += secondaryLocalRecirculationSample * secondaryLocalRecirculationGain;
+                    secondaryBranchSample += secondaryLocalRecirculationSample * secondaryRecirculationGain;
                 }
             }
 
@@ -310,7 +345,7 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                         secondaryLocalRecirculationBufferLength,
                         primaryCouplingReadPosition
                     );
-                    primaryBranchSample += coupledFromSecondary * primaryCrossCouplingGain;
+                    primaryBranchSample += coupledFromSecondary * primaryCouplingGain;
                 }
 
                 if (secondaryCouplingDelaySamplesForBranch > 0)
@@ -322,7 +357,7 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                         localRecirculationBufferLength,
                         secondaryCouplingReadPosition
                     );
-                    secondaryBranchSample += coupledFromPrimary * secondaryCrossCouplingGain;
+                    secondaryBranchSample += coupledFromPrimary * secondaryCouplingGain;
                 }
             }
 
@@ -358,10 +393,9 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
         secondaryLocalRecirculationWritePosition = 0;
     }
 
-    juce::ignoreUnused (parameters.feedbackNormalizedSmoothed);
     // The shell wet engine now runs routed input through predelay and then a tiny two-branch early
-    // structure with a small fixed cross-coupling step between branches. All timings and gains stay
-    // short and conservative so the shell gains some extra interaction without behaving like a full
-    // reverberator.
+    // structure with bounded feedback-driven local recirculation and cross-coupling. The public
+    // Feedback control only scales these short internal gains inside conservative limits so the
+    // shell can show controllable short decay without behaving like a full reverberator.
 }
 } // namespace outspread

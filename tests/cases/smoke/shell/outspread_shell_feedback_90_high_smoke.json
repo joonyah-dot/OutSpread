@@ -1,0 +1,27 @@
+{
+  "id": "outspread_shell_feedback_90_high_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.90
+  },
+  "shellVerification": {
+    "expectation": "predelay_feedback_decay_high",
+    "compareToCaseId": "outspread_shell_feedback_10_low_smoke",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "minimumLowFeedbackDeltaPeakDbfs": -20.0,
+    "minimumExtraPersistenceSamples": 128,
+    "minimumLateWindowRmsDeltaDb": 2.0,
+    "maximumPersistenceSamples": 3200
+  },
+  "notes": "Verifies that a clearly higher Feedback setting increases the current shell's short early decay relative to the low-feedback shell case without turning into a long autonomous tail."
+}

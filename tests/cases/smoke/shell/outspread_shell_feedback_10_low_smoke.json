@@ -1,0 +1,23 @@
+{
+  "id": "outspread_shell_feedback_10_low_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.10
+  },
+  "shellVerification": {
+    "expectation": "predelay_feedback_decay_low",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "maximumPersistenceSamples": 2400
+  },
+  "notes": "Verifies the current shell at a deliberately low Feedback setting. Mix is fully wet here so the predelay onset stays reviewable while the bounded early decay remains short."
+}

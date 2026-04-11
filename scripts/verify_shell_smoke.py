@@ -314,6 +314,29 @@ def compute_stereo_metrics(samples: list[list[float]]) -> dict:
     }
 
 
+def compute_window_rms_dbfs(
+    samples: list[list[float]],
+    start_frame: int,
+    length: int,
+) -> float | None:
+    if not samples or length <= 0:
+        return None
+
+    frame_count = len(samples[0])
+    if start_frame < 0 or start_frame >= frame_count:
+        return None
+
+    end_frame = min(frame_count, start_frame + length)
+    if end_frame <= start_frame:
+        return None
+
+    window_values: list[float] = []
+    for channel_samples in samples:
+        window_values.extend(channel_samples[start_frame:end_frame])
+
+    return dbfs_from_linear(linear_rms(window_values))
+
+
 def write_pcm16_wave(path: Path, sample_rate: int, samples: list[list[float]]) -> None:
     if not samples:
         raise SystemExit("error: cannot write an empty WAV buffer")
@@ -742,6 +765,95 @@ def evaluate_case(
                 issues.append(
                     f"coupled wet path side RMS {side_rms_dbfs} dBFS was lower than expected"
                 )
+    elif expectation == "predelay_feedback_decay_low":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        maximum_persistence = shell_verification.get("maximumPersistenceSamples", 2400)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+        measured_last = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetLastAboveThresholdSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay feedback low expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay feedback low verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(measured_last, int) or not isinstance(measured_onset, int) or measured_last <= measured_onset:
+            issues.append("predelay feedback low wet output did not show a usable post-onset persistence window")
+
+        if not isinstance(extra_analysis, dict):
+            issues.append("predelay feedback low verification did not run")
+        else:
+            persistence_samples = extra_analysis.get("wetPersistenceSamples")
+            if not isinstance(persistence_samples, int):
+                issues.append("predelay feedback low verification is missing wetPersistenceSamples")
+            elif persistence_samples > maximum_persistence:
+                issues.append(
+                    f"low-feedback wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
+                )
+    elif expectation == "predelay_feedback_decay_high":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        compare_to_case_id = shell_verification.get("compareToCaseId")
+        minimum_delta_peak = shell_verification.get("minimumLowFeedbackDeltaPeakDbfs", -24.0)
+        minimum_extra_persistence = shell_verification.get("minimumExtraPersistenceSamples", 128)
+        minimum_late_window_rms_delta_db = shell_verification.get("minimumLateWindowRmsDeltaDb", 1.5)
+        maximum_persistence = shell_verification.get("maximumPersistenceSamples", 3200)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+        measured_last = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetLastAboveThresholdSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay feedback high expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay feedback high verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(measured_last, int) or not isinstance(measured_onset, int) or measured_last <= measured_onset:
+            issues.append("predelay feedback high wet output did not show a usable post-onset persistence window")
+
+        if compare_to_case_id not in completed_cases:
+            issues.append(f"comparison case '{compare_to_case_id}' is not available")
+        elif not isinstance(extra_analysis, dict):
+            issues.append("predelay feedback high comparison did not run")
+        else:
+            comparison_metrics = extra_analysis.get("comparisonMetrics", {})
+            delta_peak = comparison_metrics.get("deltaPeakDbfs")
+            if not isinstance(delta_peak, (int, float)):
+                issues.append("low-feedback comparison metrics are missing deltaPeakDbfs")
+            elif delta_peak <= minimum_delta_peak:
+                issues.append(
+                    f"high-feedback wet path stayed too close to the low-feedback reference (deltaPeakDbfs={delta_peak})"
+                )
+
+            extra_persistence = extra_analysis.get("extraPersistenceSamples")
+            if not isinstance(extra_persistence, int):
+                issues.append("predelay feedback high verification is missing extraPersistenceSamples")
+            elif extra_persistence < minimum_extra_persistence:
+                issues.append(
+                    f"high-feedback wet path only extended persistence by {extra_persistence} samples"
+                )
+
+            persistence_samples = extra_analysis.get("wetPersistenceSamples")
+            if not isinstance(persistence_samples, int):
+                issues.append("predelay feedback high verification is missing wetPersistenceSamples")
+            elif persistence_samples > maximum_persistence:
+                issues.append(
+                    f"high-feedback wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
+                )
+
+            late_window_rms_delta_db = extra_analysis.get("lateWindowRmsDeltaDb")
+            if not isinstance(late_window_rms_delta_db, (int, float)):
+                issues.append("predelay feedback high verification is missing lateWindowRmsDeltaDb")
+            elif late_window_rms_delta_db < minimum_late_window_rms_delta_db:
+                issues.append(
+                    f"high-feedback late-window RMS only increased by {late_window_rms_delta_db} dB"
+                )
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
 
@@ -862,6 +974,8 @@ def main() -> int:
             "predelay_recirculation",
             "predelay_dual_branch",
             "predelay_coupled_dual_branch",
+            "predelay_feedback_decay_low",
+            "predelay_feedback_decay_high",
         }:
             _, wet_samples = decode_pcm_wave(wet_path)
             wet_onset_samples = find_first_frame_above_threshold(wet_samples)
@@ -1095,6 +1209,102 @@ def main() -> int:
                         "comparisonMetrics": comparison_metrics,
                     }
                 )
+            elif expectation == "predelay_feedback_decay_low":
+                persistence_samples = None
+                if isinstance(wet_last_samples, int) and isinstance(wet_onset_samples, int):
+                    persistence_samples = wet_last_samples - wet_onset_samples
+
+                extra_analysis.update(
+                    {
+                        "wetPersistenceSamples": persistence_samples,
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                    }
+                )
+            elif expectation == "predelay_feedback_decay_high":
+                compare_to_case_id = case_data["shellVerification"].get("compareToCaseId")
+                if not isinstance(compare_to_case_id, str) or not compare_to_case_id:
+                    raise SystemExit(
+                        f"error: predelay feedback high shell case {case_id} is missing compareToCaseId"
+                    )
+                if compare_to_case_id not in completed_cases:
+                    raise SystemExit(
+                        f"error: predelay feedback high shell case {case_id} requires completed comparison case '{compare_to_case_id}'"
+                    )
+
+                low_feedback_entry = completed_cases[compare_to_case_id]
+                low_feedback_wet_path = Path(low_feedback_entry["wetPath"])
+                _, low_feedback_samples = decode_pcm_wave(low_feedback_wet_path)
+                low_feedback_last_samples = find_last_frame_above_threshold(low_feedback_samples)
+                low_feedback_onset_samples = find_first_frame_above_threshold(low_feedback_samples)
+                extra_persistence = None
+                persistence_samples = None
+                if isinstance(wet_last_samples, int) and isinstance(low_feedback_last_samples, int):
+                    extra_persistence = wet_last_samples - low_feedback_last_samples
+                if isinstance(wet_last_samples, int) and isinstance(wet_onset_samples, int):
+                    persistence_samples = wet_last_samples - wet_onset_samples
+
+                late_window_start = None
+                low_feedback_late_window_rms_dbfs = None
+                high_feedback_late_window_rms_dbfs = None
+                late_window_rms_delta_db = None
+                if isinstance(wet_onset_samples, int):
+                    late_window_start = wet_onset_samples + 1024
+                    high_feedback_late_window_rms_dbfs = compute_window_rms_dbfs(
+                        wet_samples,
+                        late_window_start,
+                        1024,
+                    )
+                if isinstance(low_feedback_onset_samples, int):
+                    low_feedback_window_start = low_feedback_onset_samples + 1024
+                    low_feedback_late_window_rms_dbfs = compute_window_rms_dbfs(
+                        low_feedback_samples,
+                        low_feedback_window_start,
+                        1024,
+                    )
+                if isinstance(high_feedback_late_window_rms_dbfs, (int, float)) and isinstance(low_feedback_late_window_rms_dbfs, (int, float)):
+                    late_window_rms_delta_db = high_feedback_late_window_rms_dbfs - low_feedback_late_window_rms_dbfs
+
+                comparison_dir = case_dir / "low_feedback_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(low_feedback_wet_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "lowFeedbackWetPath": str(low_feedback_wet_path.resolve().as_posix()),
+                        "lowFeedbackOnsetSamples": low_feedback_onset_samples,
+                        "lowFeedbackLastAboveThresholdSamples": low_feedback_last_samples,
+                        "extraPersistenceSamples": extra_persistence,
+                        "wetPersistenceSamples": persistence_samples,
+                        "lateWindowStartSamples": late_window_start,
+                        "lowFeedbackLateWindowRmsDbfs": low_feedback_late_window_rms_dbfs,
+                        "highFeedbackLateWindowRmsDbfs": high_feedback_late_window_rms_dbfs,
+                        "lateWindowRmsDeltaDb": late_window_rms_delta_db,
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
 
         evaluation = evaluate_case(case_data, metrics, case_dir, completed_cases, extra_analysis) if metrics else {
             "caseId": case_id,
@@ -1107,6 +1317,8 @@ def main() -> int:
             completed_cases[case_id] = {
                 "wetPath": str(wet_path.resolve().as_posix()),
                 "metricsPath": str(metrics_path.resolve().as_posix()),
+                "metrics": metrics,
+                "extraAnalysis": extra_analysis,
             }
 
         case_summary = {
@@ -1194,7 +1406,7 @@ def main() -> int:
         "casesRoot": str(cases_root.as_posix()),
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
-            "The current shell remains conservative: the wet path now runs through predelay and then a tiny coupled two-branch early structure with fixed short timings.",
+            "The current shell remains conservative: the wet path now runs through predelay and then a tiny coupled two-branch early structure with bounded feedback-driven short decay.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {

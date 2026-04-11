@@ -137,11 +137,13 @@ ParameterSnapshot ParameterState::capture (int numSamples) noexcept
         juce::jlimit (0.0f, 500.0f, snapshot.predelayMs),
         numSamples
     );
-    snapshot.feedbackNormalizedSmoothed = interpolateSmoothingTarget (
+    snapshot.feedbackNormalizedStart = feedbackSmoothed.getCurrentValue();
+    snapshot.feedbackNormalizedEnd = interpolateSmoothingTarget (
         feedbackSmoothed,
         juce::jlimit (0.0f, 1.0f, snapshot.feedback / 100.0f),
         numSamples
     );
+    snapshot.feedbackNormalizedSmoothed = snapshot.feedbackNormalizedEnd;
 
     return snapshot;
 }

@@ -45,6 +45,8 @@ struct ParameterSnapshot
     float killWetGainEnd = 1.0f;
     float predelayMsStart = 0.0f;
     float predelayMsEnd = 0.0f;
+    float feedbackNormalizedStart = 0.5f;
+    float feedbackNormalizedEnd = 0.5f;
     float feedbackNormalizedSmoothed = 0.5f;
 };
 
