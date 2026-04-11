@@ -5,22 +5,22 @@ namespace
 constexpr std::array<float, 4> diffusionTapMs { 0.0f, 0.67f, 1.41f, 2.89f };
 constexpr std::array<float, 4> diffusionTapGains { 0.75f, 0.18f, -0.10f, 0.07f };
 constexpr float localRecirculationDelayMs = 4.5f;
-constexpr float minimumSizeTimeScale = 0.65f;
-constexpr float maximumSizeTimeScale = 1.35f;
-constexpr float minimumLocalRecirculationGain = 0.12f;
-constexpr float maximumLocalRecirculationGain = 0.38f;
+constexpr float minimumSizeTimeScale = 0.25f;
+constexpr float maximumSizeTimeScale = 1.75f;
+constexpr float minimumLocalRecirculationGain = 0.04f;
+constexpr float maximumLocalRecirculationGain = 0.68f;
 constexpr std::array<float, 4> secondaryDiffusionTapMs { 0.0f, 0.91f, 1.87f, 3.73f };
 constexpr std::array<float, 4> secondaryDiffusionTapGains { 0.58f, -0.16f, 0.09f, 0.05f };
 constexpr std::array<float, 2> secondaryLocalRecirculationDelayMs { 5.3f, 6.1f };
-constexpr float minimumSecondaryLocalRecirculationGain = 0.08f;
-constexpr float maximumSecondaryLocalRecirculationGain = 0.28f;
+constexpr float minimumSecondaryLocalRecirculationGain = 0.02f;
+constexpr float maximumSecondaryLocalRecirculationGain = 0.52f;
 constexpr float secondaryBranchMix = 0.35f;
 constexpr std::array<float, 2> primaryCrossCouplingDelayMs { 2.6f, 3.2f };
 constexpr std::array<float, 2> secondaryCrossCouplingDelayMs { 3.4f, 2.4f };
-constexpr float minimumPrimaryCrossCouplingGain = 0.03f;
-constexpr float maximumPrimaryCrossCouplingGain = 0.13f;
-constexpr float minimumSecondaryCrossCouplingGain = 0.02f;
-constexpr float maximumSecondaryCrossCouplingGain = 0.10f;
+constexpr float minimumPrimaryCrossCouplingGain = 0.008f;
+constexpr float maximumPrimaryCrossCouplingGain = 0.20f;
+constexpr float minimumSecondaryCrossCouplingGain = 0.005f;
+constexpr float maximumSecondaryCrossCouplingGain = 0.16f;
 
 float interpolateLinear (float startValue, float endValue, int index, int numSamples)
 {
@@ -54,7 +54,9 @@ float readDelayedSample (const float* delayChannelData, int delayBufferLength, f
 
 float mapFeedbackGain (float normalizedFeedback, float minimumGain, float maximumGain)
 {
-    return juce::jmap (juce::jlimit (0.0f, 1.0f, normalizedFeedback), minimumGain, maximumGain);
+    const auto clampedFeedback = juce::jlimit (0.0f, 1.0f, normalizedFeedback);
+    const auto shapedFeedback = clampedFeedback * (2.0f - clampedFeedback);
+    return juce::jmap (shapedFeedback, minimumGain, maximumGain);
 }
 
 float mapSizeTimeScale (float normalizedSize)
@@ -421,8 +423,8 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
 
     // The shell wet engine now runs routed input through predelay and then a tiny two-branch early
     // structure with bounded size-scaled short timings plus bounded feedback-driven local
-    // recirculation and cross-coupling. The public Size control only stretches these short internal
-    // spacings inside conservative limits so the shell can move between tighter and looser early
-    // structure without behaving like a full reverberator.
+    // recirculation and cross-coupling. These mappings are intentionally stronger than the first
+    // shell pass so Size and Feedback stay clearly audible in host listening while still remaining
+    // short, stable, and far below finished reverb-tank behavior.
 }
 } // namespace outspread

@@ -1,0 +1,31 @@
+{
+  "id": "outspread_shell_size_85_large_click_train_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 2.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.85,
+    "size": 0.85
+  },
+  "shellVerification": {
+    "expectation": "click_train_size_large",
+    "compareToCaseId": "outspread_shell_size_20_small_click_train_smoke",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "intervalLengthSamples": 12000,
+    "lateWindowOffsetSamples": 6144,
+    "lateWindowLengthSamples": 4096,
+    "centroidWindowLengthSamples": 8192,
+    "minimumSmallSizeDeltaPeakDbfs": -12.0,
+    "minimumLateWindowRmsDeltaDb": 3.0,
+    "minimumCentroidDeltaSamples": 24.0
+  },
+  "notes": "Wet-heavy click-train shell check for large Size audibility. This compares against the smaller-size click-train case and expects a clearly more spread early structure while predelay onset remains fixed."
+}

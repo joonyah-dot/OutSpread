@@ -156,7 +156,7 @@ def load_shell_cases(cases_root: Path, requested_ids: list[str]) -> list[dict]:
             raise SystemExit(
                 "error: requested shell smoke case ID(s) not found: " + ", ".join(missing)
             )
-    return cases
+    return sorted(cases, key=lambda case: str(case.get("id", "")))
 
 
 def resolve_case_input(repo_root: Path, case_data: dict, stimuli_by_id: dict[str, dict]) -> Path:
@@ -369,6 +369,32 @@ def compute_energy_centroid_offset(
         return None
 
     return weighted_sum / energy_sum
+
+
+def compute_click_train_interval_metrics(
+    samples: list[list[float]],
+    onset_frame: int,
+    interval_length: int,
+    late_window_offset: int,
+    late_window_length: int,
+    centroid_window_length: int,
+) -> dict:
+    return {
+        "intervalLengthSamples": interval_length,
+        "lateWindowOffsetSamples": late_window_offset,
+        "lateWindowLengthSamples": late_window_length,
+        "centroidWindowLengthSamples": centroid_window_length,
+        "lateWindowRmsDbfs": compute_window_rms_dbfs(
+            samples,
+            onset_frame + late_window_offset,
+            late_window_length,
+        ),
+        "centroidOffsetSamples": compute_energy_centroid_offset(
+            samples,
+            onset_frame,
+            centroid_window_length,
+        ),
+    }
 
 
 def write_pcm16_wave(path: Path, sample_rate: int, samples: list[list[float]]) -> None:
@@ -981,6 +1007,148 @@ def evaluate_case(
                 issues.append(
                     f"large-size energy centroid only moved later by {centroid_delta} samples"
                 )
+    elif expectation == "click_train_feedback_low":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("click-train feedback low expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("click-train feedback low verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(extra_analysis, dict):
+            issues.append("click-train feedback low verification did not run")
+        else:
+            late_window_rms = extra_analysis.get("lateWindowRmsDbfs")
+            if not isinstance(late_window_rms, (int, float)):
+                issues.append("click-train feedback low verification is missing lateWindowRmsDbfs")
+
+            centroid_offset = extra_analysis.get("postOnsetCentroidOffsetSamples")
+            if not isinstance(centroid_offset, (int, float)):
+                issues.append("click-train feedback low verification is missing postOnsetCentroidOffsetSamples")
+    elif expectation == "click_train_feedback_high":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        compare_to_case_id = shell_verification.get("compareToCaseId")
+        minimum_delta_peak = shell_verification.get("minimumLowFeedbackDeltaPeakDbfs", -12.0)
+        minimum_late_window_rms_delta_db = shell_verification.get("minimumLateWindowRmsDeltaDb", 6.0)
+        minimum_centroid_delta = shell_verification.get("minimumCentroidDeltaSamples", 24.0)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("click-train feedback high expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("click-train feedback high verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if compare_to_case_id not in completed_cases:
+            issues.append(f"comparison case '{compare_to_case_id}' is not available")
+        elif not isinstance(extra_analysis, dict):
+            issues.append("click-train feedback high comparison did not run")
+        else:
+            comparison_metrics = extra_analysis.get("comparisonMetrics", {})
+            delta_peak = comparison_metrics.get("deltaPeakDbfs")
+            if not isinstance(delta_peak, (int, float)):
+                issues.append("click-train low-feedback comparison metrics are missing deltaPeakDbfs")
+            elif delta_peak <= minimum_delta_peak:
+                issues.append(
+                    f"click-train high-feedback wet path stayed too close to the low-feedback reference (deltaPeakDbfs={delta_peak})"
+                )
+
+            late_window_rms_delta_db = extra_analysis.get("lateWindowRmsDeltaDb")
+            if not isinstance(late_window_rms_delta_db, (int, float)):
+                issues.append("click-train feedback high verification is missing lateWindowRmsDeltaDb")
+            elif late_window_rms_delta_db < minimum_late_window_rms_delta_db:
+                issues.append(
+                    f"click-train high-feedback late-window RMS only increased by {late_window_rms_delta_db} dB"
+                )
+
+            centroid_delta = extra_analysis.get("centroidDeltaSamples")
+            if not isinstance(centroid_delta, (int, float)):
+                issues.append("click-train feedback high verification is missing centroidDeltaSamples")
+            elif centroid_delta < minimum_centroid_delta:
+                issues.append(
+                    f"click-train high-feedback centroid only moved by {centroid_delta} samples"
+                )
+    elif expectation == "click_train_size_small":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("click-train size small expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("click-train size small verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(extra_analysis, dict):
+            issues.append("click-train size small verification did not run")
+        else:
+            late_window_rms = extra_analysis.get("lateWindowRmsDbfs")
+            if not isinstance(late_window_rms, (int, float)):
+                issues.append("click-train size small verification is missing lateWindowRmsDbfs")
+
+            centroid_offset = extra_analysis.get("postOnsetCentroidOffsetSamples")
+            if not isinstance(centroid_offset, (int, float)):
+                issues.append("click-train size small verification is missing postOnsetCentroidOffsetSamples")
+    elif expectation == "click_train_size_large":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        compare_to_case_id = shell_verification.get("compareToCaseId")
+        minimum_delta_peak = shell_verification.get("minimumSmallSizeDeltaPeakDbfs", -12.0)
+        minimum_late_window_rms_delta_db = shell_verification.get("minimumLateWindowRmsDeltaDb", 3.0)
+        minimum_centroid_delta = shell_verification.get("minimumCentroidDeltaSamples", 24.0)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("click-train size large expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("click-train size large verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if compare_to_case_id not in completed_cases:
+            issues.append(f"comparison case '{compare_to_case_id}' is not available")
+        elif not isinstance(extra_analysis, dict):
+            issues.append("click-train size large comparison did not run")
+        else:
+            comparison_metrics = extra_analysis.get("comparisonMetrics", {})
+            delta_peak = comparison_metrics.get("deltaPeakDbfs")
+            if not isinstance(delta_peak, (int, float)):
+                issues.append("click-train small-size comparison metrics are missing deltaPeakDbfs")
+            elif delta_peak <= minimum_delta_peak:
+                issues.append(
+                    f"click-train large-size wet path stayed too close to the small-size reference (deltaPeakDbfs={delta_peak})"
+                )
+
+            late_window_rms_delta_db = extra_analysis.get("lateWindowRmsDeltaDb")
+            if not isinstance(late_window_rms_delta_db, (int, float)):
+                issues.append("click-train size large verification is missing lateWindowRmsDeltaDb")
+            elif late_window_rms_delta_db < minimum_late_window_rms_delta_db:
+                issues.append(
+                    f"click-train large-size late-window RMS only increased by {late_window_rms_delta_db} dB"
+                )
+
+            centroid_delta = extra_analysis.get("centroidDeltaSamples")
+            if not isinstance(centroid_delta, (int, float)):
+                issues.append("click-train size large verification is missing centroidDeltaSamples")
+            elif centroid_delta < minimum_centroid_delta:
+                issues.append(
+                    f"click-train large-size centroid only moved by {centroid_delta} samples"
+                )
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
 
@@ -1105,6 +1273,10 @@ def main() -> int:
             "predelay_feedback_decay_high",
             "predelay_size_small",
             "predelay_size_large",
+            "click_train_feedback_low",
+            "click_train_feedback_high",
+            "click_train_size_small",
+            "click_train_size_large",
         }:
             _, wet_samples = decode_pcm_wave(wet_path)
             wet_onset_samples = find_first_frame_above_threshold(wet_samples)
@@ -1532,6 +1704,270 @@ def main() -> int:
                         "comparisonMetrics": comparison_metrics,
                     }
                 )
+            elif expectation == "click_train_feedback_low":
+                interval_length = case_data["shellVerification"].get("intervalLengthSamples", 12000)
+                late_window_offset = case_data["shellVerification"].get("lateWindowOffsetSamples", 6144)
+                late_window_length = case_data["shellVerification"].get("lateWindowLengthSamples", 4096)
+                centroid_window_length = case_data["shellVerification"].get("centroidWindowLengthSamples", 8192)
+
+                click_train_metrics = {}
+                if isinstance(wet_onset_samples, int):
+                    click_train_metrics = compute_click_train_interval_metrics(
+                        wet_samples,
+                        wet_onset_samples,
+                        interval_length,
+                        late_window_offset,
+                        late_window_length,
+                        centroid_window_length,
+                    )
+
+                extra_analysis.update(
+                    {
+                        "lateWindowStartSamples": None if not isinstance(wet_onset_samples, int) else wet_onset_samples + late_window_offset,
+                        "lateWindowRmsDbfs": click_train_metrics.get("lateWindowRmsDbfs"),
+                        "postOnsetCentroidOffsetSamples": click_train_metrics.get("centroidOffsetSamples"),
+                        "analysisWindowConfig": {
+                            "intervalLengthSamples": interval_length,
+                            "lateWindowOffsetSamples": late_window_offset,
+                            "lateWindowLengthSamples": late_window_length,
+                            "centroidWindowLengthSamples": centroid_window_length,
+                        },
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                    }
+                )
+            elif expectation == "click_train_feedback_high":
+                compare_to_case_id = case_data["shellVerification"].get("compareToCaseId")
+                if not isinstance(compare_to_case_id, str) or not compare_to_case_id:
+                    raise SystemExit(
+                        f"error: click-train feedback high shell case {case_id} is missing compareToCaseId"
+                    )
+                if compare_to_case_id not in completed_cases:
+                    raise SystemExit(
+                        f"error: click-train feedback high shell case {case_id} requires completed comparison case '{compare_to_case_id}'"
+                    )
+
+                interval_length = case_data["shellVerification"].get("intervalLengthSamples", 12000)
+                late_window_offset = case_data["shellVerification"].get("lateWindowOffsetSamples", 6144)
+                late_window_length = case_data["shellVerification"].get("lateWindowLengthSamples", 4096)
+                centroid_window_length = case_data["shellVerification"].get("centroidWindowLengthSamples", 8192)
+
+                low_feedback_entry = completed_cases[compare_to_case_id]
+                low_feedback_wet_path = Path(low_feedback_entry["wetPath"])
+                _, low_feedback_samples = decode_pcm_wave(low_feedback_wet_path)
+                low_feedback_onset_samples = find_first_frame_above_threshold(low_feedback_samples)
+
+                high_click_train_metrics = {}
+                low_click_train_metrics = {}
+                if isinstance(wet_onset_samples, int):
+                    high_click_train_metrics = compute_click_train_interval_metrics(
+                        wet_samples,
+                        wet_onset_samples,
+                        interval_length,
+                        late_window_offset,
+                        late_window_length,
+                        centroid_window_length,
+                    )
+                if isinstance(low_feedback_onset_samples, int):
+                    low_click_train_metrics = compute_click_train_interval_metrics(
+                        low_feedback_samples,
+                        low_feedback_onset_samples,
+                        interval_length,
+                        late_window_offset,
+                        late_window_length,
+                        centroid_window_length,
+                    )
+
+                late_window_rms_delta_db = None
+                centroid_delta = None
+                high_late_window_rms = high_click_train_metrics.get("lateWindowRmsDbfs")
+                low_late_window_rms = low_click_train_metrics.get("lateWindowRmsDbfs")
+                if isinstance(high_late_window_rms, (int, float)) and isinstance(low_late_window_rms, (int, float)):
+                    late_window_rms_delta_db = high_late_window_rms - low_late_window_rms
+
+                high_centroid = high_click_train_metrics.get("centroidOffsetSamples")
+                low_centroid = low_click_train_metrics.get("centroidOffsetSamples")
+                if isinstance(high_centroid, (int, float)) and isinstance(low_centroid, (int, float)):
+                    centroid_delta = high_centroid - low_centroid
+
+                comparison_dir = case_dir / "low_feedback_click_train_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(low_feedback_wet_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "lowFeedbackWetPath": str(low_feedback_wet_path.resolve().as_posix()),
+                        "lowFeedbackOnsetSamples": low_feedback_onset_samples,
+                        "lateWindowStartSamples": None if not isinstance(wet_onset_samples, int) else wet_onset_samples + late_window_offset,
+                        "lowFeedbackLateWindowRmsDbfs": low_late_window_rms,
+                        "highFeedbackLateWindowRmsDbfs": high_late_window_rms,
+                        "lateWindowRmsDeltaDb": late_window_rms_delta_db,
+                        "lowFeedbackCentroidOffsetSamples": low_centroid,
+                        "highFeedbackCentroidOffsetSamples": high_centroid,
+                        "centroidDeltaSamples": centroid_delta,
+                        "analysisWindowConfig": {
+                            "intervalLengthSamples": interval_length,
+                            "lateWindowOffsetSamples": late_window_offset,
+                            "lateWindowLengthSamples": late_window_length,
+                            "centroidWindowLengthSamples": centroid_window_length,
+                        },
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
+            elif expectation == "click_train_size_small":
+                interval_length = case_data["shellVerification"].get("intervalLengthSamples", 12000)
+                late_window_offset = case_data["shellVerification"].get("lateWindowOffsetSamples", 6144)
+                late_window_length = case_data["shellVerification"].get("lateWindowLengthSamples", 4096)
+                centroid_window_length = case_data["shellVerification"].get("centroidWindowLengthSamples", 8192)
+
+                click_train_metrics = {}
+                if isinstance(wet_onset_samples, int):
+                    click_train_metrics = compute_click_train_interval_metrics(
+                        wet_samples,
+                        wet_onset_samples,
+                        interval_length,
+                        late_window_offset,
+                        late_window_length,
+                        centroid_window_length,
+                    )
+
+                extra_analysis.update(
+                    {
+                        "lateWindowStartSamples": None if not isinstance(wet_onset_samples, int) else wet_onset_samples + late_window_offset,
+                        "lateWindowRmsDbfs": click_train_metrics.get("lateWindowRmsDbfs"),
+                        "postOnsetCentroidOffsetSamples": click_train_metrics.get("centroidOffsetSamples"),
+                        "analysisWindowConfig": {
+                            "intervalLengthSamples": interval_length,
+                            "lateWindowOffsetSamples": late_window_offset,
+                            "lateWindowLengthSamples": late_window_length,
+                            "centroidWindowLengthSamples": centroid_window_length,
+                        },
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                    }
+                )
+            elif expectation == "click_train_size_large":
+                compare_to_case_id = case_data["shellVerification"].get("compareToCaseId")
+                if not isinstance(compare_to_case_id, str) or not compare_to_case_id:
+                    raise SystemExit(
+                        f"error: click-train size large shell case {case_id} is missing compareToCaseId"
+                    )
+                if compare_to_case_id not in completed_cases:
+                    raise SystemExit(
+                        f"error: click-train size large shell case {case_id} requires completed comparison case '{compare_to_case_id}'"
+                    )
+
+                interval_length = case_data["shellVerification"].get("intervalLengthSamples", 12000)
+                late_window_offset = case_data["shellVerification"].get("lateWindowOffsetSamples", 6144)
+                late_window_length = case_data["shellVerification"].get("lateWindowLengthSamples", 4096)
+                centroid_window_length = case_data["shellVerification"].get("centroidWindowLengthSamples", 8192)
+
+                small_size_entry = completed_cases[compare_to_case_id]
+                small_size_wet_path = Path(small_size_entry["wetPath"])
+                _, small_size_samples = decode_pcm_wave(small_size_wet_path)
+                small_size_onset_samples = find_first_frame_above_threshold(small_size_samples)
+
+                large_click_train_metrics = {}
+                small_click_train_metrics = {}
+                if isinstance(wet_onset_samples, int):
+                    large_click_train_metrics = compute_click_train_interval_metrics(
+                        wet_samples,
+                        wet_onset_samples,
+                        interval_length,
+                        late_window_offset,
+                        late_window_length,
+                        centroid_window_length,
+                    )
+                if isinstance(small_size_onset_samples, int):
+                    small_click_train_metrics = compute_click_train_interval_metrics(
+                        small_size_samples,
+                        small_size_onset_samples,
+                        interval_length,
+                        late_window_offset,
+                        late_window_length,
+                        centroid_window_length,
+                    )
+
+                late_window_rms_delta_db = None
+                centroid_delta = None
+                large_late_window_rms = large_click_train_metrics.get("lateWindowRmsDbfs")
+                small_late_window_rms = small_click_train_metrics.get("lateWindowRmsDbfs")
+                if isinstance(large_late_window_rms, (int, float)) and isinstance(small_late_window_rms, (int, float)):
+                    late_window_rms_delta_db = large_late_window_rms - small_late_window_rms
+
+                large_centroid = large_click_train_metrics.get("centroidOffsetSamples")
+                small_centroid = small_click_train_metrics.get("centroidOffsetSamples")
+                if isinstance(large_centroid, (int, float)) and isinstance(small_centroid, (int, float)):
+                    centroid_delta = large_centroid - small_centroid
+
+                comparison_dir = case_dir / "small_size_click_train_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(small_size_wet_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "smallSizeWetPath": str(small_size_wet_path.resolve().as_posix()),
+                        "smallSizeOnsetSamples": small_size_onset_samples,
+                        "lateWindowStartSamples": None if not isinstance(wet_onset_samples, int) else wet_onset_samples + late_window_offset,
+                        "smallSizeLateWindowRmsDbfs": small_late_window_rms,
+                        "largeSizeLateWindowRmsDbfs": large_late_window_rms,
+                        "lateWindowRmsDeltaDb": late_window_rms_delta_db,
+                        "smallSizeCentroidOffsetSamples": small_centroid,
+                        "largeSizeCentroidOffsetSamples": large_centroid,
+                        "centroidDeltaSamples": centroid_delta,
+                        "analysisWindowConfig": {
+                            "intervalLengthSamples": interval_length,
+                            "lateWindowOffsetSamples": late_window_offset,
+                            "lateWindowLengthSamples": late_window_length,
+                            "centroidWindowLengthSamples": centroid_window_length,
+                        },
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
 
         evaluation = evaluate_case(case_data, metrics, case_dir, completed_cases, extra_analysis) if metrics else {
             "caseId": case_id,
@@ -1634,6 +2070,7 @@ def main() -> int:
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
             "The current shell remains conservative: the wet path now runs through predelay and then a tiny coupled two-branch early structure with bounded size-scaled short timings and bounded feedback-driven short decay.",
+            "The click-train shell cases are the practical audibility checks for Size and Feedback because they expose host-style wet differences more clearly than an isolated impulse alone.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {

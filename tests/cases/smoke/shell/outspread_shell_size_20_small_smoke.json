@@ -18,7 +18,7 @@
     "expectation": "predelay_size_small",
     "expectedLatencySamples": 2880,
     "latencyToleranceSamples": 8,
-    "maximumPersistenceSamples": 2200
+    "maximumPersistenceSamples": 2600
   },
   "notes": "Verifies the current shell with a deliberately smaller Size setting. Mix is fully wet and Feedback stays moderate so the early structure remains reviewable while the internal timings stay compact."
 }

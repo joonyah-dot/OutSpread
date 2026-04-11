@@ -17,7 +17,7 @@
     "expectedLatencySamples": 2880,
     "latencyToleranceSamples": 8,
     "minimumUncoupledDeltaPeakDbfs": -80.0,
-    "maximumPersistenceSamples": 2600,
+    "maximumPersistenceSamples": 3600,
     "maximumLeftRightCorrelation": 0.9999,
     "minimumSideRmsDbfs": -110.0
   },

@@ -1,0 +1,31 @@
+{
+  "id": "outspread_shell_feedback_90_high_click_train_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 2.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.90,
+    "size": 0.75
+  },
+  "shellVerification": {
+    "expectation": "click_train_feedback_high",
+    "compareToCaseId": "outspread_shell_feedback_10_low_click_train_smoke",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "intervalLengthSamples": 12000,
+    "lateWindowOffsetSamples": 6144,
+    "lateWindowLengthSamples": 4096,
+    "centroidWindowLengthSamples": 8192,
+    "minimumLowFeedbackDeltaPeakDbfs": -12.0,
+    "minimumLateWindowRmsDeltaDb": 6.0,
+    "minimumCentroidDeltaSamples": 24.0
+  },
+  "notes": "Wet-heavy click-train shell check for high Feedback audibility. This compares against the low-feedback click-train case and expects a clearly stronger short decay without creating a long autonomous tail."
+}

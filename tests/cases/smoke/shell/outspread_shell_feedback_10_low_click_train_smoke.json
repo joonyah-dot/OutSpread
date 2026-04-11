@@ -1,0 +1,27 @@
+{
+  "id": "outspread_shell_feedback_10_low_click_train_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 2.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.10,
+    "size": 0.75
+  },
+  "shellVerification": {
+    "expectation": "click_train_feedback_low",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "intervalLengthSamples": 12000,
+    "lateWindowOffsetSamples": 6144,
+    "lateWindowLengthSamples": 4096,
+    "centroidWindowLengthSamples": 8192
+  },
+  "notes": "Wet-heavy click-train shell check for low Feedback audibility. The larger Size setting keeps the short early structure exposed enough that higher Feedback should be clearly more persistent in real listening without turning into a long tail."
+}

@@ -1,0 +1,27 @@
+{
+  "id": "outspread_shell_size_20_small_click_train_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "click_train"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 2.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.85,
+    "size": 0.20
+  },
+  "shellVerification": {
+    "expectation": "click_train_size_small",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "intervalLengthSamples": 12000,
+    "lateWindowOffsetSamples": 6144,
+    "lateWindowLengthSamples": 4096,
+    "centroidWindowLengthSamples": 8192
+  },
+  "notes": "Wet-heavy click-train shell check for small Size audibility. Feedback stays high enough that the short internal geometry is easy to hear while the smaller Size setting should stay compact."
+}
