@@ -11,6 +11,10 @@ constexpr std::array<float, 4> secondaryDiffusionTapGains { 0.58f, -0.16f, 0.09f
 constexpr std::array<float, 2> secondaryLocalRecirculationDelayMs { 5.3f, 6.1f };
 constexpr float secondaryLocalRecirculationGain = 0.18f;
 constexpr float secondaryBranchMix = 0.35f;
+constexpr std::array<float, 2> primaryCrossCouplingDelayMs { 2.6f, 3.2f };
+constexpr std::array<float, 2> secondaryCrossCouplingDelayMs { 3.4f, 2.4f };
+constexpr float primaryCrossCouplingGain = 0.08f;
+constexpr float secondaryCrossCouplingGain = 0.06f;
 
 float interpolateLinear (float startValue, float endValue, int index, int numSamples)
 {
@@ -90,6 +94,12 @@ void WetEngine::prepare (double sampleRate, int maximumBlockSizeToPrepare, int o
         secondaryLocalRecirculationDelaySamples[index] = static_cast<int> (
             std::round ((sampleRate * static_cast<double> (secondaryLocalRecirculationDelayMs[index])) / 1000.0)
         );
+        primaryCrossCouplingDelaySamples[index] = static_cast<int> (
+            std::round ((sampleRate * static_cast<double> (primaryCrossCouplingDelayMs[index])) / 1000.0)
+        );
+        secondaryCrossCouplingDelaySamples[index] = static_cast<int> (
+            std::round ((sampleRate * static_cast<double> (secondaryCrossCouplingDelayMs[index])) / 1000.0)
+        );
     }
 
     wetBuffer.setSize (outputChannels, maximumBlockSize, false, false, true);
@@ -136,6 +146,8 @@ void WetEngine::releaseResources()
     diffusionTapSamples = { 0, 0, 0, 0 };
     secondaryDiffusionTapSamples = { 0, 0, 0, 0 };
     secondaryLocalRecirculationDelaySamples = { 0, 0 };
+    primaryCrossCouplingDelaySamples = { 0, 0 };
+    secondaryCrossCouplingDelaySamples = { 0, 0 };
 }
 
 void WetEngine::reset()
@@ -283,6 +295,37 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                 }
             }
 
+            if (delaySamples >= 1.0f)
+            {
+                const auto couplingDelayIndex = std::min (channel, static_cast<int> (primaryCrossCouplingDelaySamples.size()) - 1);
+                const auto primaryCouplingDelaySamples = primaryCrossCouplingDelaySamples[couplingDelayIndex];
+                const auto secondaryCouplingDelaySamplesForBranch = secondaryCrossCouplingDelaySamples[couplingDelayIndex];
+
+                if (primaryCouplingDelaySamples > 0)
+                {
+                    const auto primaryCouplingReadPosition =
+                        static_cast<float> (secondaryLocalRecirculationWritePosition - primaryCouplingDelaySamples);
+                    const auto coupledFromSecondary = readDelayedSample (
+                        secondaryLocalRecirculationChannel,
+                        secondaryLocalRecirculationBufferLength,
+                        primaryCouplingReadPosition
+                    );
+                    primaryBranchSample += coupledFromSecondary * primaryCrossCouplingGain;
+                }
+
+                if (secondaryCouplingDelaySamplesForBranch > 0)
+                {
+                    const auto secondaryCouplingReadPosition =
+                        static_cast<float> (localRecirculationWritePosition - secondaryCouplingDelaySamplesForBranch);
+                    const auto coupledFromPrimary = readDelayedSample (
+                        localRecirculationChannel,
+                        localRecirculationBufferLength,
+                        secondaryCouplingReadPosition
+                    );
+                    secondaryBranchSample += coupledFromPrimary * secondaryCrossCouplingGain;
+                }
+            }
+
             localRecirculationChannel[localRecirculationWritePosition] = primaryBranchSample;
             secondaryLocalRecirculationChannel[secondaryLocalRecirculationWritePosition] = secondaryBranchSample;
 
@@ -317,7 +360,8 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
 
     juce::ignoreUnused (parameters.feedbackNormalizedSmoothed);
     // The shell wet engine now runs routed input through predelay and then a tiny two-branch early
-    // structure. Both branches stay fixed, short, and local so the shell gains some extra density
-    // and decorrelation without behaving like a full reverberator.
+    // structure with a small fixed cross-coupling step between branches. All timings and gains stay
+    // short and conservative so the shell gains some extra interaction without behaving like a full
+    // reverberator.
 }
 } // namespace outspread

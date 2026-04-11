@@ -13,13 +13,13 @@
     "predelay": 0.12
   },
   "shellVerification": {
-    "expectation": "predelay_dual_branch",
+    "expectation": "predelay_coupled_dual_branch",
     "expectedLatencySamples": 2880,
     "latencyToleranceSamples": 8,
-    "minimumSingleBranchDeltaPeakDbfs": -80.0,
+    "minimumUncoupledDeltaPeakDbfs": -80.0,
     "maximumPersistenceSamples": 2600,
     "maximumLeftRightCorrelation": 0.9999,
     "minimumSideRmsDbfs": -110.0
   },
-  "notes": "Verifies that the current shell wet path includes real predelay feeding a tiny two-branch early structure. Mix is fully wet here so the onset delay, the difference from the single-branch reference, and the small stereo decorrelation are all reviewable."
+  "notes": "Verifies that the current shell wet path includes real predelay feeding a tiny coupled two-branch early structure. Mix is fully wet here so the onset delay, the difference from the uncoupled two-branch reference, and the small stereo decorrelation are all reviewable."
 }

@@ -43,5 +43,7 @@ private:
     std::array<int, 4> diffusionTapSamples { 0, 0, 0, 0 };
     std::array<int, 4> secondaryDiffusionTapSamples { 0, 0, 0, 0 };
     std::array<int, 2> secondaryLocalRecirculationDelaySamples { 0, 0 };
+    std::array<int, 2> primaryCrossCouplingDelaySamples { 0, 0 };
+    std::array<int, 2> secondaryCrossCouplingDelaySamples { 0, 0 };
 };
 } // namespace outspread

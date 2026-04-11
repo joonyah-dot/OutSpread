@@ -18,6 +18,11 @@ DIFFUSION_TAP_MS = (0.0, 0.67, 1.41, 2.89)
 DIFFUSION_TAP_GAINS = (0.75, 0.18, -0.10, 0.07)
 LOCAL_RECIRCULATION_DELAY_MS = 4.5
 LOCAL_RECIRCULATION_GAIN = 0.25
+SECONDARY_DIFFUSION_TAP_MS = (0.0, 0.91, 1.87, 3.73)
+SECONDARY_DIFFUSION_TAP_GAINS = (0.58, -0.16, 0.09, 0.05)
+SECONDARY_LOCAL_RECIRCULATION_DELAY_MS = (5.3, 6.1)
+SECONDARY_LOCAL_RECIRCULATION_GAIN = 0.18
+SECONDARY_BRANCH_MIX = 0.35
 
 
 def parse_args() -> argparse.Namespace:
@@ -433,6 +438,78 @@ def build_single_branch_reference(
     return output_path
 
 
+def build_uncoupled_two_branch_reference(
+    input_path: Path,
+    output_path: Path,
+    output_channels: int,
+    delay_samples: int,
+) -> Path:
+    sample_rate, input_samples = decode_pcm_wave(input_path)
+    input_channels = len(input_samples)
+    frame_count = len(input_samples[0]) if input_samples else 0
+    primary_diffusion_tap_samples = [
+        int(round((sample_rate * tap_ms) / 1000.0)) for tap_ms in DIFFUSION_TAP_MS
+    ]
+    secondary_diffusion_tap_samples = [
+        int(round((sample_rate * tap_ms) / 1000.0)) for tap_ms in SECONDARY_DIFFUSION_TAP_MS
+    ]
+    primary_local_recirculation_delay_samples = int(
+        round((sample_rate * LOCAL_RECIRCULATION_DELAY_MS) / 1000.0)
+    )
+    secondary_local_recirculation_delay_samples = [
+        int(round((sample_rate * tap_ms) / 1000.0))
+        for tap_ms in SECONDARY_LOCAL_RECIRCULATION_DELAY_MS
+    ]
+
+    reference_samples = [[0.0 for _ in range(frame_count)] for _ in range(output_channels)]
+    primary_branch_samples = [[0.0 for _ in range(frame_count)] for _ in range(output_channels)]
+    secondary_branch_samples = [[0.0 for _ in range(frame_count)] for _ in range(output_channels)]
+
+    for channel in range(output_channels):
+        source_channel = min(channel, input_channels - 1)
+        source = input_samples[source_channel]
+        output_target = reference_samples[channel]
+        primary_target = primary_branch_samples[channel]
+        secondary_target = secondary_branch_samples[channel]
+        secondary_delay = secondary_local_recirculation_delay_samples[
+            min(channel, len(secondary_local_recirculation_delay_samples) - 1)
+        ]
+
+        for frame_index in range(frame_count):
+            predelayed_index = frame_index - delay_samples
+            if predelayed_index < 0:
+                continue
+
+            primary_diffused_sample = 0.0
+            for tap_samples, tap_gain in zip(primary_diffusion_tap_samples, DIFFUSION_TAP_GAINS):
+                tap_index = predelayed_index - tap_samples
+                if tap_index >= 0:
+                    primary_diffused_sample += source[tap_index] * tap_gain
+
+            primary_wet_sample = primary_diffused_sample
+            primary_recirculation_index = frame_index - primary_local_recirculation_delay_samples
+            if primary_recirculation_index >= 0:
+                primary_wet_sample += primary_target[primary_recirculation_index] * LOCAL_RECIRCULATION_GAIN
+            primary_target[frame_index] = primary_wet_sample
+
+            secondary_diffused_sample = 0.0
+            for tap_samples, tap_gain in zip(secondary_diffusion_tap_samples, SECONDARY_DIFFUSION_TAP_GAINS):
+                tap_index = predelayed_index - tap_samples
+                if tap_index >= 0:
+                    secondary_diffused_sample += source[tap_index] * tap_gain
+
+            secondary_wet_sample = secondary_diffused_sample
+            secondary_recirculation_index = frame_index - secondary_delay
+            if secondary_recirculation_index >= 0:
+                secondary_wet_sample += secondary_target[secondary_recirculation_index] * SECONDARY_LOCAL_RECIRCULATION_GAIN
+            secondary_target[frame_index] = secondary_wet_sample
+
+            output_target[frame_index] = primary_wet_sample + (secondary_wet_sample * SECONDARY_BRANCH_MIX)
+
+    write_pcm16_wave(output_path, sample_rate, reference_samples)
+    return output_path
+
+
 def make_stereo_probe_wav(path: Path, sample_rate: int = 48000, duration_seconds: float = 1.0) -> Path:
     num_frames = int(round(sample_rate * duration_seconds))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -597,10 +674,10 @@ def evaluate_case(
                 issues.append(
                     f"recirculating wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
                 )
-    elif expectation == "predelay_dual_branch":
+    elif expectation == "predelay_coupled_dual_branch":
         expected_latency = shell_verification.get("expectedLatencySamples")
         tolerance = shell_verification.get("latencyToleranceSamples", 8)
-        minimum_delta_peak = shell_verification.get("minimumSingleBranchDeltaPeakDbfs", -80.0)
+        minimum_delta_peak = shell_verification.get("minimumUncoupledDeltaPeakDbfs", -80.0)
         minimum_extra_persistence = shell_verification.get("minimumExtraPersistenceSamples")
         maximum_persistence = shell_verification.get("maximumPersistenceSamples", 2600)
         maximum_correlation = shell_verification.get("maximumLeftRightCorrelation", 0.9999)
@@ -609,61 +686,61 @@ def evaluate_case(
         measured_last = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetLastAboveThresholdSamples")
 
         if not isinstance(expected_latency, int):
-            issues.append("predelay dual-branch expectation is missing expectedLatencySamples")
+            issues.append("predelay coupled dual-branch expectation is missing expectedLatencySamples")
         elif not isinstance(measured_onset, int):
-            issues.append("predelay dual-branch verification is missing wetOnsetSamples")
+            issues.append("predelay coupled dual-branch verification is missing wetOnsetSamples")
         elif abs(measured_onset - expected_latency) > tolerance:
             issues.append(
                 f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
             )
 
         if not isinstance(measured_last, int) or not isinstance(measured_onset, int) or measured_last <= measured_onset:
-            issues.append("predelay dual-branch wet output did not show a usable post-onset persistence window")
+            issues.append("predelay coupled dual-branch wet output did not show a usable post-onset persistence window")
 
         if not isinstance(extra_analysis, dict):
-            issues.append("predelay dual-branch comparison did not run")
+            issues.append("predelay coupled dual-branch comparison did not run")
         else:
             comparison_metrics = extra_analysis.get("comparisonMetrics", {})
             delta_peak = comparison_metrics.get("deltaPeakDbfs")
             if not isinstance(delta_peak, (int, float)):
-                issues.append("single-branch comparison metrics are missing deltaPeakDbfs")
+                issues.append("uncoupled dual-branch comparison metrics are missing deltaPeakDbfs")
             elif delta_peak <= minimum_delta_peak:
                 issues.append(
-                    f"dual-branch wet path stayed too close to the single-branch reference (deltaPeakDbfs={delta_peak})"
+                    f"coupled wet path stayed too close to the uncoupled dual-branch reference (deltaPeakDbfs={delta_peak})"
                 )
 
             extra_persistence = extra_analysis.get("extraPersistenceSamples")
             if minimum_extra_persistence is not None:
                 if not isinstance(extra_persistence, int):
-                    issues.append("predelay dual-branch verification is missing extraPersistenceSamples")
+                    issues.append("predelay coupled dual-branch verification is missing extraPersistenceSamples")
                 elif extra_persistence < minimum_extra_persistence:
                     issues.append(
-                        f"dual-branch wet path only extended persistence by {extra_persistence} samples"
+                        f"coupled wet path only extended persistence by {extra_persistence} samples"
                     )
 
             persistence_samples = extra_analysis.get("wetPersistenceSamples")
             if not isinstance(persistence_samples, int):
-                issues.append("predelay dual-branch verification is missing wetPersistenceSamples")
+                issues.append("predelay coupled dual-branch verification is missing wetPersistenceSamples")
             elif persistence_samples > maximum_persistence:
                 issues.append(
-                    f"dual-branch wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
+                    f"coupled wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
                 )
 
             stereo_metrics = extra_analysis.get("stereoMetrics", {})
             left_right_correlation = stereo_metrics.get("leftRightCorrelation")
             if not isinstance(left_right_correlation, (int, float)):
-                issues.append("predelay dual-branch verification is missing leftRightCorrelation")
+                issues.append("predelay coupled dual-branch verification is missing leftRightCorrelation")
             elif left_right_correlation > maximum_correlation:
                 issues.append(
-                    f"dual-branch wet path stayed too correlated between left and right ({left_right_correlation})"
+                    f"coupled wet path stayed too correlated between left and right ({left_right_correlation})"
                 )
 
             side_rms_dbfs = stereo_metrics.get("sideRmsDbfs")
             if not isinstance(side_rms_dbfs, (int, float)):
-                issues.append("predelay dual-branch verification is missing sideRmsDbfs")
+                issues.append("predelay coupled dual-branch verification is missing sideRmsDbfs")
             elif side_rms_dbfs < minimum_side_rms_dbfs:
                 issues.append(
-                    f"dual-branch wet path side RMS {side_rms_dbfs} dBFS was lower than expected"
+                    f"coupled wet path side RMS {side_rms_dbfs} dBFS was lower than expected"
                 )
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
@@ -784,6 +861,7 @@ def main() -> int:
             "predelay_diffusion",
             "predelay_recirculation",
             "predelay_dual_branch",
+            "predelay_coupled_dual_branch",
         }:
             _, wet_samples = decode_pcm_wave(wet_path)
             wet_onset_samples = find_first_frame_above_threshold(wet_samples)
@@ -958,6 +1036,65 @@ def main() -> int:
                         "comparisonMetrics": comparison_metrics,
                     }
                 )
+            elif expectation == "predelay_coupled_dual_branch":
+                expected_latency = case_data["shellVerification"].get("expectedLatencySamples")
+                if not isinstance(expected_latency, int):
+                    raise SystemExit(
+                        f"error: predelay coupled dual-branch shell case {case_id} is missing expectedLatencySamples"
+                    )
+
+                uncoupled_reference_dir = case_dir / "uncoupled_dual_branch_reference"
+                uncoupled_reference_path = build_uncoupled_two_branch_reference(
+                    input_path,
+                    uncoupled_reference_dir / "uncoupled_dual_branch_reference.wav",
+                    int(case_data.get("channels", 2)),
+                    expected_latency,
+                )
+                _, uncoupled_reference_samples = decode_pcm_wave(uncoupled_reference_path)
+                uncoupled_last_samples = find_last_frame_above_threshold(uncoupled_reference_samples)
+                extra_persistence = None
+                persistence_samples = None
+                if isinstance(wet_last_samples, int) and isinstance(uncoupled_last_samples, int):
+                    extra_persistence = wet_last_samples - uncoupled_last_samples
+                if isinstance(wet_last_samples, int) and isinstance(wet_onset_samples, int):
+                    persistence_samples = wet_last_samples - wet_onset_samples
+
+                comparison_dir = case_dir / "uncoupled_dual_branch_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(uncoupled_reference_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "uncoupledDualBranchReferencePath": str(uncoupled_reference_path.resolve().as_posix()),
+                        "uncoupledDualBranchLastAboveThresholdSamples": uncoupled_last_samples,
+                        "extraPersistenceSamples": extra_persistence,
+                        "wetPersistenceSamples": persistence_samples,
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
 
         evaluation = evaluate_case(case_data, metrics, case_dir, completed_cases, extra_analysis) if metrics else {
             "caseId": case_id,
@@ -1057,7 +1194,7 @@ def main() -> int:
         "casesRoot": str(cases_root.as_posix()),
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
-            "The current shell remains conservative: the wet path now runs through predelay and then a tiny two-branch early structure with fixed short timings.",
+            "The current shell remains conservative: the wet path now runs through predelay and then a tiny coupled two-branch early structure with fixed short timings.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {
