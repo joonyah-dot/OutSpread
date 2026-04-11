@@ -80,6 +80,7 @@ void ParameterState::prepare (double sampleRate)
     mixWetSmoothed.reset (sampleRate, 0.02);
     killWetGainSmoothed.reset (sampleRate, 0.002);
     predelayMsSmoothed.reset (sampleRate, 0.02);
+    sizeSmoothed.reset (sampleRate, 0.02);
     feedbackSmoothed.reset (sampleRate, 0.02);
     reset();
 }
@@ -90,6 +91,7 @@ void ParameterState::reset()
     mixWetSmoothed.setCurrentAndTargetValue (juce::jlimit (0.0f, 1.0f, snapshot.mix / 100.0f));
     killWetGainSmoothed.setCurrentAndTargetValue (snapshot.kill ? 0.0f : 1.0f);
     predelayMsSmoothed.setCurrentAndTargetValue (juce::jlimit (0.0f, 500.0f, snapshot.predelayMs));
+    sizeSmoothed.setCurrentAndTargetValue (juce::jlimit (0.0f, 1.0f, snapshot.size / 100.0f));
     feedbackSmoothed.setCurrentAndTargetValue (juce::jlimit (0.0f, 1.0f, snapshot.feedback / 100.0f));
 }
 
@@ -137,6 +139,13 @@ ParameterSnapshot ParameterState::capture (int numSamples) noexcept
         juce::jlimit (0.0f, 500.0f, snapshot.predelayMs),
         numSamples
     );
+    snapshot.sizeNormalizedStart = sizeSmoothed.getCurrentValue();
+    snapshot.sizeNormalizedEnd = interpolateSmoothingTarget (
+        sizeSmoothed,
+        juce::jlimit (0.0f, 1.0f, snapshot.size / 100.0f),
+        numSamples
+    );
+    snapshot.sizeNormalizedSmoothed = snapshot.sizeNormalizedEnd;
     snapshot.feedbackNormalizedStart = feedbackSmoothed.getCurrentValue();
     snapshot.feedbackNormalizedEnd = interpolateSmoothingTarget (
         feedbackSmoothed,

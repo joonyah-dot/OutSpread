@@ -5,6 +5,8 @@ namespace
 constexpr std::array<float, 4> diffusionTapMs { 0.0f, 0.67f, 1.41f, 2.89f };
 constexpr std::array<float, 4> diffusionTapGains { 0.75f, 0.18f, -0.10f, 0.07f };
 constexpr float localRecirculationDelayMs = 4.5f;
+constexpr float minimumSizeTimeScale = 0.65f;
+constexpr float maximumSizeTimeScale = 1.35f;
 constexpr float minimumLocalRecirculationGain = 0.12f;
 constexpr float maximumLocalRecirculationGain = 0.38f;
 constexpr std::array<float, 4> secondaryDiffusionTapMs { 0.0f, 0.91f, 1.87f, 3.73f };
@@ -54,6 +56,15 @@ float mapFeedbackGain (float normalizedFeedback, float minimumGain, float maximu
 {
     return juce::jmap (juce::jlimit (0.0f, 1.0f, normalizedFeedback), minimumGain, maximumGain);
 }
+
+float mapSizeTimeScale (float normalizedSize)
+{
+    return juce::jmap (
+        juce::jlimit (0.0f, 1.0f, normalizedSize),
+        minimumSizeTimeScale,
+        maximumSizeTimeScale
+    );
+}
 } // namespace
 
 namespace outspread
@@ -68,22 +79,22 @@ void WetEngine::prepare (double sampleRate, int maximumBlockSizeToPrepare, int o
     // ordinary processing can stay allocation-free after prepare().
     maximumPredelaySamples = static_cast<int> (std::ceil (sampleRate * 0.5)) + maximumBlockSize + 1;
 
-    const auto longestDiffusionTapMs = diffusionTapMs.back();
+    const auto longestDiffusionTapMs = diffusionTapMs.back() * maximumSizeTimeScale;
     maximumDiffusionSamples = static_cast<int> (std::ceil ((sampleRate * longestDiffusionTapMs) / 1000.0)) + 1;
     maximumLocalRecirculationSamples = static_cast<int> (
-        std::ceil ((sampleRate * localRecirculationDelayMs) / 1000.0)
+        std::ceil ((sampleRate * (localRecirculationDelayMs * maximumSizeTimeScale)) / 1000.0)
     ) + 1;
     localRecirculationDelaySamples = static_cast<int> (
         std::round ((sampleRate * static_cast<double> (localRecirculationDelayMs)) / 1000.0)
     );
-    const auto longestSecondaryDiffusionTapMs = secondaryDiffusionTapMs.back();
+    const auto longestSecondaryDiffusionTapMs = secondaryDiffusionTapMs.back() * maximumSizeTimeScale;
     maximumSecondaryDiffusionSamples = static_cast<int> (
         std::ceil ((sampleRate * longestSecondaryDiffusionTapMs) / 1000.0)
     ) + 1;
     const auto longestSecondaryLocalRecirculationDelayMs = std::max (
         secondaryLocalRecirculationDelayMs[0],
         secondaryLocalRecirculationDelayMs[1]
-    );
+    ) * maximumSizeTimeScale;
     maximumSecondaryLocalRecirculationSamples = static_cast<int> (
         std::ceil ((sampleRate * longestSecondaryLocalRecirculationDelayMs) / 1000.0)
     ) + 1;
@@ -235,6 +246,13 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
             sample,
             numSamples
         );
+        const auto normalizedSize = interpolateLinear (
+            parameters.sizeNormalizedStart,
+            parameters.sizeNormalizedEnd,
+            sample,
+            numSamples
+        );
+        const auto sizeTimeScale = mapSizeTimeScale (normalizedSize);
         const auto primaryRecirculationGain = mapFeedbackGain (
             normalizedFeedback,
             minimumLocalRecirculationGain,
@@ -280,7 +298,8 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                 diffusedSample = 0.0f;
                 for (size_t tapIndex = 0; tapIndex < diffusionTapGains.size(); ++tapIndex)
                 {
-                    const auto tapReadPosition = static_cast<float> (diffusionWritePosition - diffusionTapSamples[tapIndex]);
+                    const auto scaledTapSamples = static_cast<float> (diffusionTapSamples[tapIndex]) * sizeTimeScale;
+                    const auto tapReadPosition = static_cast<float> (diffusionWritePosition) - scaledTapSamples;
                     diffusedSample += diffusionTapGains[tapIndex]
                         * readDelayedSample (diffusionChannel, diffusionBufferLength, tapReadPosition);
                 }
@@ -288,8 +307,10 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                 secondaryDiffusedSample = 0.0f;
                 for (size_t tapIndex = 0; tapIndex < secondaryDiffusionTapGains.size(); ++tapIndex)
                 {
+                    const auto scaledSecondaryTapSamples =
+                        static_cast<float> (secondaryDiffusionTapSamples[tapIndex]) * sizeTimeScale;
                     const auto secondaryTapReadPosition =
-                        static_cast<float> (secondaryDiffusionWritePosition - secondaryDiffusionTapSamples[tapIndex]);
+                        static_cast<float> (secondaryDiffusionWritePosition) - scaledSecondaryTapSamples;
                     secondaryDiffusedSample += secondaryDiffusionTapGains[tapIndex]
                         * readDelayedSample (
                             secondaryDiffusionChannel,
@@ -302,8 +323,10 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
             auto primaryBranchSample = diffusedSample;
             if (delaySamples >= 1.0f && localRecirculationDelaySamples > 0)
             {
+                const auto scaledPrimaryRecirculationDelaySamples =
+                    static_cast<float> (localRecirculationDelaySamples) * sizeTimeScale;
                 const auto localRecirculationReadPosition =
-                    static_cast<float> (localRecirculationWritePosition - localRecirculationDelaySamples);
+                    static_cast<float> (localRecirculationWritePosition) - scaledPrimaryRecirculationDelaySamples;
                 const auto localRecirculationSample = readDelayedSample (
                     localRecirculationChannel,
                     localRecirculationBufferLength,
@@ -316,11 +339,12 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
             if (delaySamples >= 1.0f)
             {
                 const auto secondaryDelayIndex = std::min (channel, static_cast<int> (secondaryLocalRecirculationDelaySamples.size()) - 1);
-                const auto secondaryRecirculationDelaySamples = secondaryLocalRecirculationDelaySamples[secondaryDelayIndex];
-                if (secondaryRecirculationDelaySamples > 0)
+                const auto secondaryRecirculationDelaySamples =
+                    static_cast<float> (secondaryLocalRecirculationDelaySamples[secondaryDelayIndex]) * sizeTimeScale;
+                if (secondaryRecirculationDelaySamples > 0.0f)
                 {
                     const auto secondaryLocalRecirculationReadPosition =
-                        static_cast<float> (secondaryLocalRecirculationWritePosition - secondaryRecirculationDelaySamples);
+                        static_cast<float> (secondaryLocalRecirculationWritePosition) - secondaryRecirculationDelaySamples;
                     const auto secondaryLocalRecirculationSample = readDelayedSample (
                         secondaryLocalRecirculationChannel,
                         secondaryLocalRecirculationBufferLength,
@@ -333,13 +357,15 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
             if (delaySamples >= 1.0f)
             {
                 const auto couplingDelayIndex = std::min (channel, static_cast<int> (primaryCrossCouplingDelaySamples.size()) - 1);
-                const auto primaryCouplingDelaySamples = primaryCrossCouplingDelaySamples[couplingDelayIndex];
-                const auto secondaryCouplingDelaySamplesForBranch = secondaryCrossCouplingDelaySamples[couplingDelayIndex];
+                const auto primaryCouplingDelaySamples =
+                    static_cast<float> (primaryCrossCouplingDelaySamples[couplingDelayIndex]) * sizeTimeScale;
+                const auto secondaryCouplingDelaySamplesForBranch =
+                    static_cast<float> (secondaryCrossCouplingDelaySamples[couplingDelayIndex]) * sizeTimeScale;
 
-                if (primaryCouplingDelaySamples > 0)
+                if (primaryCouplingDelaySamples > 0.0f)
                 {
                     const auto primaryCouplingReadPosition =
-                        static_cast<float> (secondaryLocalRecirculationWritePosition - primaryCouplingDelaySamples);
+                        static_cast<float> (secondaryLocalRecirculationWritePosition) - primaryCouplingDelaySamples;
                     const auto coupledFromSecondary = readDelayedSample (
                         secondaryLocalRecirculationChannel,
                         secondaryLocalRecirculationBufferLength,
@@ -348,10 +374,10 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
                     primaryBranchSample += coupledFromSecondary * primaryCouplingGain;
                 }
 
-                if (secondaryCouplingDelaySamplesForBranch > 0)
+                if (secondaryCouplingDelaySamplesForBranch > 0.0f)
                 {
                     const auto secondaryCouplingReadPosition =
-                        static_cast<float> (localRecirculationWritePosition - secondaryCouplingDelaySamplesForBranch);
+                        static_cast<float> (localRecirculationWritePosition) - secondaryCouplingDelaySamplesForBranch;
                     const auto coupledFromPrimary = readDelayedSample (
                         localRecirculationChannel,
                         localRecirculationBufferLength,
@@ -394,8 +420,9 @@ void WetEngine::process (const juce::AudioBuffer<float>& routedInput, const Para
     }
 
     // The shell wet engine now runs routed input through predelay and then a tiny two-branch early
-    // structure with bounded feedback-driven local recirculation and cross-coupling. The public
-    // Feedback control only scales these short internal gains inside conservative limits so the
-    // shell can show controllable short decay without behaving like a full reverberator.
+    // structure with bounded size-scaled short timings plus bounded feedback-driven local
+    // recirculation and cross-coupling. The public Size control only stretches these short internal
+    // spacings inside conservative limits so the shell can move between tighter and looser early
+    // structure without behaving like a full reverberator.
 }
 } // namespace outspread

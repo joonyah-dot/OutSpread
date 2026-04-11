@@ -45,6 +45,9 @@ struct ParameterSnapshot
     float killWetGainEnd = 1.0f;
     float predelayMsStart = 0.0f;
     float predelayMsEnd = 0.0f;
+    float sizeNormalizedStart = 0.5f;
+    float sizeNormalizedEnd = 0.5f;
+    float sizeNormalizedSmoothed = 0.5f;
     float feedbackNormalizedStart = 0.5f;
     float feedbackNormalizedEnd = 0.5f;
     float feedbackNormalizedSmoothed = 0.5f;
@@ -84,6 +87,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mixWetSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> killWetGainSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> predelayMsSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> sizeSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> feedbackSmoothed;
 };
 } // namespace outspread

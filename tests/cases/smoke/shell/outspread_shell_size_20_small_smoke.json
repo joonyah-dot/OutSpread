@@ -1,0 +1,24 @@
+{
+  "id": "outspread_shell_size_20_small_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.70,
+    "size": 0.20
+  },
+  "shellVerification": {
+    "expectation": "predelay_size_small",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "maximumPersistenceSamples": 2200
+  },
+  "notes": "Verifies the current shell with a deliberately smaller Size setting. Mix is fully wet and Feedback stays moderate so the early structure remains reviewable while the internal timings stay compact."
+}

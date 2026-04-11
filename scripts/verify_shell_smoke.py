@@ -337,6 +337,40 @@ def compute_window_rms_dbfs(
     return dbfs_from_linear(linear_rms(window_values))
 
 
+def compute_energy_centroid_offset(
+    samples: list[list[float]],
+    onset_frame: int,
+    length: int,
+) -> float | None:
+    if not samples or length <= 0:
+        return None
+
+    frame_count = len(samples[0])
+    if onset_frame < 0 or onset_frame >= frame_count:
+        return None
+
+    end_frame = min(frame_count, onset_frame + length)
+    if end_frame <= onset_frame:
+        return None
+
+    weighted_sum = 0.0
+    energy_sum = 0.0
+    for frame_index in range(onset_frame, end_frame):
+        frame_energy = 0.0
+        for channel_samples in samples:
+            sample = channel_samples[frame_index]
+            frame_energy += sample * sample
+
+        offset = frame_index - onset_frame
+        weighted_sum += frame_energy * offset
+        energy_sum += frame_energy
+
+    if energy_sum <= 1.0e-18:
+        return None
+
+    return weighted_sum / energy_sum
+
+
 def write_pcm16_wave(path: Path, sample_rate: int, samples: list[list[float]]) -> None:
     if not samples:
         raise SystemExit("error: cannot write an empty WAV buffer")
@@ -854,6 +888,99 @@ def evaluate_case(
                 issues.append(
                     f"high-feedback late-window RMS only increased by {late_window_rms_delta_db} dB"
                 )
+    elif expectation == "predelay_size_small":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        maximum_persistence = shell_verification.get("maximumPersistenceSamples", 2200)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+        measured_last = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetLastAboveThresholdSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay size small expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay size small verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(measured_last, int) or not isinstance(measured_onset, int) or measured_last <= measured_onset:
+            issues.append("predelay size small wet output did not show a usable post-onset persistence window")
+
+        if not isinstance(extra_analysis, dict):
+            issues.append("predelay size small verification did not run")
+        else:
+            persistence_samples = extra_analysis.get("wetPersistenceSamples")
+            if not isinstance(persistence_samples, int):
+                issues.append("predelay size small verification is missing wetPersistenceSamples")
+            elif persistence_samples > maximum_persistence:
+                issues.append(
+                    f"small-size wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
+                )
+
+            centroid_offset = extra_analysis.get("postOnsetCentroidOffsetSamples")
+            if not isinstance(centroid_offset, (int, float)):
+                issues.append("predelay size small verification is missing postOnsetCentroidOffsetSamples")
+    elif expectation == "predelay_size_large":
+        expected_latency = shell_verification.get("expectedLatencySamples")
+        tolerance = shell_verification.get("latencyToleranceSamples", 8)
+        compare_to_case_id = shell_verification.get("compareToCaseId")
+        minimum_delta_peak = shell_verification.get("minimumSmallSizeDeltaPeakDbfs", -12.0)
+        minimum_extra_persistence = shell_verification.get("minimumExtraPersistenceSamples", 64)
+        minimum_centroid_delta = shell_verification.get("minimumCentroidDeltaSamples", 80.0)
+        maximum_persistence = shell_verification.get("maximumPersistenceSamples", 3000)
+        measured_onset = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetOnsetSamples")
+        measured_last = None if not isinstance(extra_analysis, dict) else extra_analysis.get("wetLastAboveThresholdSamples")
+
+        if not isinstance(expected_latency, int):
+            issues.append("predelay size large expectation is missing expectedLatencySamples")
+        elif not isinstance(measured_onset, int):
+            issues.append("predelay size large verification is missing wetOnsetSamples")
+        elif abs(measured_onset - expected_latency) > tolerance:
+            issues.append(
+                f"measured wet onset {measured_onset} samples did not match expected {expected_latency} +/- {tolerance}"
+            )
+
+        if not isinstance(measured_last, int) or not isinstance(measured_onset, int) or measured_last <= measured_onset:
+            issues.append("predelay size large wet output did not show a usable post-onset persistence window")
+
+        if compare_to_case_id not in completed_cases:
+            issues.append(f"comparison case '{compare_to_case_id}' is not available")
+        elif not isinstance(extra_analysis, dict):
+            issues.append("predelay size large comparison did not run")
+        else:
+            comparison_metrics = extra_analysis.get("comparisonMetrics", {})
+            delta_peak = comparison_metrics.get("deltaPeakDbfs")
+            if not isinstance(delta_peak, (int, float)):
+                issues.append("small-size comparison metrics are missing deltaPeakDbfs")
+            elif delta_peak <= minimum_delta_peak:
+                issues.append(
+                    f"large-size wet path stayed too close to the small-size reference (deltaPeakDbfs={delta_peak})"
+                )
+
+            extra_persistence = extra_analysis.get("extraPersistenceSamples")
+            if not isinstance(extra_persistence, int):
+                issues.append("predelay size large verification is missing extraPersistenceSamples")
+            elif extra_persistence < minimum_extra_persistence:
+                issues.append(
+                    f"large-size wet path only extended persistence by {extra_persistence} samples"
+                )
+
+            persistence_samples = extra_analysis.get("wetPersistenceSamples")
+            if not isinstance(persistence_samples, int):
+                issues.append("predelay size large verification is missing wetPersistenceSamples")
+            elif persistence_samples > maximum_persistence:
+                issues.append(
+                    f"large-size wet path persisted for {persistence_samples} samples, which is longer than expected for this shell stage"
+                )
+
+            centroid_delta = extra_analysis.get("centroidDeltaSamples")
+            if not isinstance(centroid_delta, (int, float)):
+                issues.append("predelay size large verification is missing centroidDeltaSamples")
+            elif centroid_delta < minimum_centroid_delta:
+                issues.append(
+                    f"large-size energy centroid only moved later by {centroid_delta} samples"
+                )
     else:
         issues.append(f"unsupported shell expectation '{expectation}'")
 
@@ -976,6 +1103,8 @@ def main() -> int:
             "predelay_coupled_dual_branch",
             "predelay_feedback_decay_low",
             "predelay_feedback_decay_high",
+            "predelay_size_small",
+            "predelay_size_large",
         }:
             _, wet_samples = decode_pcm_wave(wet_path)
             wet_onset_samples = find_first_frame_above_threshold(wet_samples)
@@ -1305,6 +1434,104 @@ def main() -> int:
                         "comparisonMetrics": comparison_metrics,
                     }
                 )
+            elif expectation == "predelay_size_small":
+                persistence_samples = None
+                centroid_offset = None
+                if isinstance(wet_last_samples, int) and isinstance(wet_onset_samples, int):
+                    persistence_samples = wet_last_samples - wet_onset_samples
+                    centroid_offset = compute_energy_centroid_offset(
+                        wet_samples,
+                        wet_onset_samples,
+                        2048,
+                    )
+
+                extra_analysis.update(
+                    {
+                        "wetPersistenceSamples": persistence_samples,
+                        "postOnsetCentroidOffsetSamples": centroid_offset,
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                    }
+                )
+            elif expectation == "predelay_size_large":
+                compare_to_case_id = case_data["shellVerification"].get("compareToCaseId")
+                if not isinstance(compare_to_case_id, str) or not compare_to_case_id:
+                    raise SystemExit(
+                        f"error: predelay size large shell case {case_id} is missing compareToCaseId"
+                    )
+                if compare_to_case_id not in completed_cases:
+                    raise SystemExit(
+                        f"error: predelay size large shell case {case_id} requires completed comparison case '{compare_to_case_id}'"
+                    )
+
+                small_size_entry = completed_cases[compare_to_case_id]
+                small_size_wet_path = Path(small_size_entry["wetPath"])
+                _, small_size_samples = decode_pcm_wave(small_size_wet_path)
+                small_size_last_samples = find_last_frame_above_threshold(small_size_samples)
+                small_size_onset_samples = find_first_frame_above_threshold(small_size_samples)
+                extra_persistence = None
+                persistence_samples = None
+                centroid_delta = None
+                post_onset_centroid_offset = None
+                small_size_centroid_offset = None
+
+                if isinstance(wet_last_samples, int) and isinstance(small_size_last_samples, int):
+                    extra_persistence = wet_last_samples - small_size_last_samples
+                if isinstance(wet_last_samples, int) and isinstance(wet_onset_samples, int):
+                    persistence_samples = wet_last_samples - wet_onset_samples
+                    post_onset_centroid_offset = compute_energy_centroid_offset(
+                        wet_samples,
+                        wet_onset_samples,
+                        2048,
+                    )
+                if isinstance(small_size_onset_samples, int):
+                    small_size_centroid_offset = compute_energy_centroid_offset(
+                        small_size_samples,
+                        small_size_onset_samples,
+                        2048,
+                    )
+                if isinstance(post_onset_centroid_offset, (int, float)) and isinstance(small_size_centroid_offset, (int, float)):
+                    centroid_delta = post_onset_centroid_offset - small_size_centroid_offset
+
+                comparison_dir = case_dir / "small_size_comparison"
+                comparison_command = [
+                    str(harness_path),
+                    "analyze",
+                    "--dry",
+                    str(small_size_wet_path),
+                    "--wet",
+                    str(wet_path),
+                    "--outdir",
+                    str(comparison_dir),
+                    "--auto-align",
+                    "--null",
+                ]
+                comparison_result = run_command(
+                    comparison_command,
+                    repo_root,
+                    comparison_dir / "analyze.stdout.txt",
+                    comparison_dir / "analyze.stderr.txt",
+                )
+                comparison_metrics = {}
+                comparison_metrics_path = comparison_dir / "metrics.json"
+                if comparison_result["exitCode"] == 0 and comparison_metrics_path.is_file():
+                    comparison_metrics = load_json(comparison_metrics_path)
+
+                extra_analysis.update(
+                    {
+                        "smallSizeWetPath": str(small_size_wet_path.resolve().as_posix()),
+                        "smallSizeOnsetSamples": small_size_onset_samples,
+                        "smallSizeLastAboveThresholdSamples": small_size_last_samples,
+                        "smallSizeCentroidOffsetSamples": small_size_centroid_offset,
+                        "extraPersistenceSamples": extra_persistence,
+                        "wetPersistenceSamples": persistence_samples,
+                        "postOnsetCentroidOffsetSamples": post_onset_centroid_offset,
+                        "centroidDeltaSamples": centroid_delta,
+                        "stereoMetrics": compute_stereo_metrics(wet_samples),
+                        "comparisonResult": comparison_result,
+                        "comparisonMetricsPath": str(comparison_metrics_path.resolve().as_posix()),
+                        "comparisonMetrics": comparison_metrics,
+                    }
+                )
 
         evaluation = evaluate_case(case_data, metrics, case_dir, completed_cases, extra_analysis) if metrics else {
             "caseId": case_id,
@@ -1406,7 +1633,7 @@ def main() -> int:
         "casesRoot": str(cases_root.as_posix()),
         "notes": [
             "This is shell verification for the current OutSpread plugin shell, not a Blackhole parity run.",
-            "The current shell remains conservative: the wet path now runs through predelay and then a tiny coupled two-branch early structure with bounded feedback-driven short decay.",
+            "The current shell remains conservative: the wet path now runs through predelay and then a tiny coupled two-branch early structure with bounded size-scaled short timings and bounded feedback-driven short decay.",
             "The current harness directly verifies stereo->stereo renders, but mono->stereo is verified through OutSpreadShellVerifier because the harness configures symmetric channel layouts only.",
         ],
         "verifierRuns": {

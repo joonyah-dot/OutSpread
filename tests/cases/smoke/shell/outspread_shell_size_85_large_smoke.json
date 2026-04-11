@@ -1,0 +1,28 @@
+{
+  "id": "outspread_shell_size_85_large_smoke",
+  "caseKind": "shell_verification",
+  "group": "smoke",
+  "input": {
+    "stimulusId": "impulse"
+  },
+  "channels": 2,
+  "warmupMs": 50,
+  "renderSeconds": 1.0,
+  "paramsByName": {
+    "mix": 1.0,
+    "predelay": 0.12,
+    "feedback": 0.70,
+    "size": 0.85
+  },
+  "shellVerification": {
+    "expectation": "predelay_size_large",
+    "compareToCaseId": "outspread_shell_size_20_small_smoke",
+    "expectedLatencySamples": 2880,
+    "latencyToleranceSamples": 8,
+    "minimumSmallSizeDeltaPeakDbfs": -20.0,
+    "minimumExtraPersistenceSamples": 64,
+    "minimumCentroidDeltaSamples": 8.0,
+    "maximumPersistenceSamples": 3000
+  },
+  "notes": "Verifies that a clearly larger Size setting spreads the current shell's early wet structure later than the smaller-size shell case without turning into a long autonomous tail."
+}
